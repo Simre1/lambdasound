@@ -1,0 +1,70 @@
+cabal-version:      3.0
+name:               lambdasound
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            MIT
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+-- copyright:
+category:           Sound
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  
+        LambdaSound,
+        LambdaSound.Sound,
+        LambdaSound.Sample,
+        LambdaSound.Effect,
+        LambdaSound.Play,
+        LambdaSound.Note,
+        LambdaSound.Plugin,
+        LambdaSound.Cache
+    -- other-modules:
+    -- other-extensions:
+    build-depends:    
+        base ^>=4.17.0.0,
+        containers,
+        typed-process,
+        bytestring,
+        rrb-vector,
+        vector,
+        -- ghc >= 9.4.4,
+        template-haskell,
+        random,
+        directory,
+        filepath,
+        binary
+    hs-source-dirs:   src
+    default-language: GHC2021
+
+executable lambdasound-exe
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound
+
+    hs-source-dirs:   app
+    default-language: GHC2021
+
+test-suite lambdasound-test
+    import:           warnings
+    default-language: GHC2021
+    -- other-modules:
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound
