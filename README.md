@@ -31,3 +31,7 @@ You can also take a look at `app/Main.hs` for a bigger example and play it with 
 - [ ] Specific durations (quarter notes, eigth notes, settable BPM)
 - [ ] More Semitones
 - [ ] Better caching
+
+## Contributing
+
+Feel free to try out this library and add additional functionality. I am especially interested in things from the _Wanted Features_ list.
