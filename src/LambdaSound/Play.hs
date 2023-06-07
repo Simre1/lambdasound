@@ -7,7 +7,7 @@ import System.Process.Typed
 import qualified Data.Vector as V
 
 sampleSound :: Hz -> Sound a -> V.Vector a
-sampleSound hz (Sound duration compute) =
+sampleSound hz (Sound duration _ compute) =
   let step = 1 / hz
       i = V.fromList $ coerce [0, step..coerce duration]
       f = compute i

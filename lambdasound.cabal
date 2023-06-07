@@ -34,11 +34,8 @@ library
         containers,
         typed-process,
         bytestring,
-        rrb-vector,
         vector,
         -- ghc >= 9.4.4,
-        template-haskell,
-        random,
         directory,
         filepath,
         binary

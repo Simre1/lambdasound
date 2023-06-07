@@ -7,7 +7,7 @@ import LambdaSound.Sound
 
 easeInOut :: Int -> Sound Pulse -> Sound Pulse
 easeInOut strength sound =
-  zipSound ((*) <$> (f <$> progress (getDuration sound))) sound
+  zipSound ((*) `mapSound` (f `mapSound` progress (getDuration sound))) sound
   where
     f p = coerce $ -(2 * p - 1) ** (abs (fromIntegral strength) * 2) + 1
 

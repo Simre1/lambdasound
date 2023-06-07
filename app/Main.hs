@@ -3,7 +3,10 @@ module Main where
 import LambdaSound
 
 song :: Sound Pulse
-song = parallel2 background melody
+song = upwards
+
+upwards :: Sound Pulse
+upwards = reverb 0.5 $ setDuration 2.5 $ mconcat $ note <$> [c4, d4, e4, f4, g4]
 
 background :: Sound Pulse
 background =
@@ -14,7 +17,6 @@ background =
           repeatSound 3 $ parallel $ note <$> [e3, g3]
         ]
 
-{-# ANN melody Cache #-}
 melody :: Sound Pulse
 melody =
   let mel =
