@@ -1,16 +1,26 @@
 module LambdaSound.Sample where
 
 import Data.Coerce
+import Data.Vector qualified as V
 import LambdaSound.Sound
+import System.Random as R
 
 newtype Hz = Hz Float deriving (Show, Eq, Ord, Num, Fractional, Floating, Enum)
 
-pulse :: Hz -> Duration -> Sound Pulse
-pulse hz d  = (\t -> sin (coerce hz * coerce t * 2 * pi)) `mapSound` time d
+pulse :: Hz -> Sound I Pulse
+pulse hz = (\t -> sin (coerce hz * coerce t * 2 * pi)) <$> time
 
-harmonic :: Hz -> Duration -> Sound Pulse
-harmonic hz d = parallel $ (\x -> reduce x $ pulse (coerce x * hz) d) <$> take 6 [1..]
+harmonic :: Hz -> Sound I Pulse
+harmonic hz = parallel $ (\x -> reduce x $ pulse (coerce x * hz)) <$> take 6 [1 ..]
 
-harmonic2 :: Hz -> Duration -> Sound Pulse
-harmonic2 hz d = parallel $ (\x -> reduce (logBase 2 (x + 1)) $ pulse (coerce x * hz) d) <$> take 6 [1..]
+harmonic2 :: Hz -> Sound I Pulse
+harmonic2 hz = parallel $ (\x -> reduce (logBase 2 (x + 1)) $ pulse (coerce x * hz)) <$> take 6 [1 ..]
 
+noise :: Int -> Sound I Pulse
+noise initial = InfiniteSound $ \sr ->
+  let noiseVector =
+        V.unfoldrExactN
+          sr.samples
+          (R.uniformR (-1, 1))
+          (mkStdGen initial)
+   in \cs -> Pulse $ noiseVector V.! cs.index

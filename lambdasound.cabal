@@ -25,7 +25,6 @@ library
         LambdaSound.Effect,
         LambdaSound.Play,
         LambdaSound.Note,
-        LambdaSound.Plugin,
         LambdaSound.Cache
     -- other-modules:
     -- other-extensions:
@@ -38,8 +37,15 @@ library
         -- ghc >= 9.4.4,
         directory,
         filepath,
-        binary
+        binary,
+        random
     hs-source-dirs:   src
+    default-extensions:
+        DuplicateRecordFields,
+        OverloadedRecordDot,
+        NoFieldSelectors,
+        DataKinds,
+        TypeFamilies
     default-language: GHC2021
 
 executable lambdasound-exe
@@ -50,7 +56,8 @@ executable lambdasound-exe
     build-depends:
         base ^>=4.17.0.0,
         lambdasound
-
+    default-extensions:
+        DataKinds
     hs-source-dirs:   app
     default-language: GHC2021
 
@@ -62,6 +69,8 @@ test-suite lambdasound-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
+    default-extensions:
+        DataKinds
     build-depends:
         base ^>=4.17.0.0,
         lambdasound

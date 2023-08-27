@@ -1,27 +1,27 @@
 module LambdaSound.Effect where
 
 import Data.Coerce
-import Data.Semigroup (stimes)
-import Data.Vector qualified as V
 import LambdaSound.Sound
 
-easeInOut :: Int -> Sound Pulse -> Sound Pulse
-easeInOut strength sound =
-  zipSound ((*) `mapSound` (f `mapSound` progress (getDuration sound))) sound
+easeInOut :: Int -> Sound d Pulse -> Sound d Pulse
+easeInOut strength = zipSound $ (*) . f <$> progress
   where
     f p = coerce $ -(2 * p - 1) ** (abs (fromIntegral strength) * 2) + 1
 
-repeatSound :: Int -> Sound a -> Sound a
-repeatSound = stimes
+repeatSound :: Int -> Sound T Pulse -> Sound T Pulse
+repeatSound n s
+  | n <= 0 = mempty
+  | even n = s' >>> s'
+  | otherwise = s' >>> s' >>> s
+  where
+    s' = repeatSound (n `quot` 2) s
 
-reverb :: Duration -> Sound Pulse -> Sound Pulse
-reverb d = convolve kernel
+reverb :: Duration -> Sound T Pulse -> Sound T Pulse
+reverb d = convolveDuration kernel
   where
     kernel =
       Kernel
-        { coefficients = \(start, end) ->
-            let n = end - start
-             in V.generate n $ \i -> fromIntegral (n - i) / fromIntegral n,
+        { coefficients = \p -> coerce p ** 3,
           size = d,
-          offset = d / 2
+          offset = -d / 2
         }

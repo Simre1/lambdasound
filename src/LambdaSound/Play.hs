@@ -6,14 +6,13 @@ import Data.ByteString.Builder qualified as B
 import System.Process.Typed
 import qualified Data.Vector as V
 
-sampleSound :: Hz -> Sound a -> V.Vector a
-sampleSound hz (Sound duration _ compute) =
-  let step = 1 / hz
-      i = V.fromList $ coerce [0, step..coerce duration]
-      f = compute i
-   in V.generate (V.length i) f
+sampleSound :: Hz -> Sound T a -> V.Vector a
+sampleSound hz (TimedSound duration compute) =
+  let period = coerce $ 1 / hz
+      sr = SampleRate period (round $ coerce duration / period)
+   in V.generate sr.samples $ compute sr . csFromSr sr
 
-save :: Hz -> Sound Pulse -> FilePath -> IO ()
+save :: Hz -> Sound T Pulse -> FilePath -> IO ()
 save hz sound filePath =
   let floats = compressDynamically $ realToFrac  <$> sampleSound hz sound
    in B.writeFile filePath $ foldMap B.floatLE floats
@@ -27,7 +26,7 @@ compressDynamically signal = scaleToMax . sigmoid <$> signal
     maxPulse = maximum $ fmap abs signal
     factor = 0.8
 
-play :: Hz -> Sound Pulse -> IO ()
+play :: Hz -> Sound T Pulse -> IO ()
 play sampleRate sound = do
   save sampleRate sound "/tmp/haskell-music"
   _ <-

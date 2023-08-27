@@ -11,10 +11,10 @@ pitchStandard = 440.0
 semitoneToHz :: Semitone -> Hz
 semitoneToHz n = pitchStandard * (2 ** (fromIntegral (fromEnum n) * 1.0 / 12.0))
 
-raiseSemitones :: Int -> Sound Pulse -> Sound Pulse
+raiseSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 raiseSemitones x = raise (2 ** (fromIntegral x / 12))
 
-diminishSemitones :: Int -> Sound Pulse -> Sound Pulse
+diminishSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 diminishSemitones x = raiseSemitones (-x)
 
 asNote :: (Hz -> a) -> Semitone -> a
