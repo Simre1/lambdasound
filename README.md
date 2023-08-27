@@ -5,11 +5,11 @@ A Haskell libary for generating sounds. Sounds are just a series of floats which
 ## Examples
 
 ```haskell
-sound440Hz :: Sound Pulse
-sound440Hz = pulse 440 1
+sound440Hz :: Sound I Pulse
+sound440Hz = pulse 440 
 
-notes :: Sound Pulse
-notes = asNote pulse c4 1 <> asNote pulse e4 1 <> asNote pulse g4 1 
+triad :: Sound I Pulse
+triad = parallel $ fmap (asNote pulse) [c4, e4, g4]
 ```
 
 You can also take a look at `app/Main.hs` for a bigger example and play it with `cabal run lambdasound-exe`.
@@ -22,10 +22,10 @@ You can also take a look at `app/Main.hs` for a bigger example and play it with 
 - [x] Volume combinators
 - [x] Semitone combinators
 - [x] Scaling speed
+- [x] take/drop for sounds
 
 ## Wanted Features
 
-- [ ] take/drop for sounds
 - [ ] More effects
 - [ ] Much more and better samples (especially ones similar to instruments)
 - [ ] Specific durations (quarter notes, eigth notes, settable BPM)
@@ -34,4 +34,4 @@ You can also take a look at `app/Main.hs` for a bigger example and play it with 
 
 ## Contributing
 
-Feel free to try out this library and add additional functionality. I am especially interested in things from the _Wanted Features_ list.
+Feel free to try out this library and add additional functionality.
