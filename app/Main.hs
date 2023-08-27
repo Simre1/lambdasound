@@ -3,7 +3,7 @@ module Main where
 import LambdaSound
 
 song :: Sound T Pulse
-song = cache $ reverb 0.1 $ background <> melody
+song = melody <> background 
 
 upwards :: Sound T Pulse
 upwards = setDuration 2.5 $ sequentially $ note <$> [c4, d4, e4, f4, g4]
@@ -39,7 +39,7 @@ main = do
   play 44000 song
 
 metronome :: Sound T Pulse
-metronome = repeatSound 20 $ note c4 >>> setDuration 1 silence
+metronome = repeatSound 10 $ setDuration 1 $ note c4 >>> setDuration 2 silence
 
 speedup :: Sound T Pulse -> Sound T Pulse
 speedup = changeTempo $ \p -> p ** 2
