@@ -10,7 +10,7 @@ sampleSound :: Hz -> Sound T a -> V.Vector a
 sampleSound hz (TimedSound duration compute) =
   let period = coerce $ 1 / hz
       sr = SampleRate period (round $ coerce duration / period)
-   in V.generate sr.samples $ compute sr . csFromSr sr
+   in V.generate sr.samples $ compute sr . coerce
 
 save :: Hz -> Sound T Pulse -> FilePath -> IO ()
 save hz sound filePath =

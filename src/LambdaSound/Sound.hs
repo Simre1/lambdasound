@@ -17,14 +17,13 @@ newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractio
 data SampleRate = SampleRate
   { period :: !Float,
     samples :: !Int
-  } deriving Show
+  }
+  deriving (Show)
 
 newtype CurrentSample = CurrentSample
   { index :: Int
-  } deriving Show
-
-csFromSr :: SampleRate -> Int -> CurrentSample
-csFromSr sr i = CurrentSample i (fromIntegral i / fromIntegral (sr.samples - 1))
+  }
+  deriving (Show)
 
 data SoundDuration = I | T
 
@@ -43,15 +42,15 @@ data Sound (d :: SoundDuration) a where
     (SampleRate -> CurrentSample -> a) ->
     Sound I a
 
-instance Show a => Show (Sound d a) where
+instance (Show a) => Show (Sound d a) where
   show (TimedSound d c) = showSampledCompute d c
   show (InfiniteSound c) = showSampledCompute 3 c
 
-showSampledCompute :: Show a => Duration -> (SampleRate -> CurrentSample -> a) -> String
-showSampledCompute d c = 
+showSampledCompute :: (Show a) => Duration -> (SampleRate -> CurrentSample -> a) -> String
+showSampledCompute d c =
   let c' = c sr
-      sr = SampleRate (1/25) (ceiling $ d * 25)
-  in show $ V.generate (ceiling $ d * 25) $ c' . csFromSr sr
+      sr = SampleRate (1 / 25) (ceiling $ d * 25)
+   in show $ V.generate (ceiling $ d * 25) $ c' . CurrentSample
 
 instance Functor (Sound d) where
   fmap f (TimedSound d c) = TimedSound d $ \sr -> f . c sr
@@ -70,22 +69,22 @@ instance Monoid (Sound T Pulse) where
   mempty = TimedSound 0 $ \_ _ -> 0
   {-# INLINE mempty #-}
 
-expand :: Sound T a -> Sound T (V.Vector a)
-expand (TimedSound d c) = TimedSound d $ \sr ->
-  let expanded = V.generate (sr.samples) $ \index ->
-        c sr $ csFromSr sr index
-   in const expanded
-{-# INLINE expand #-}
+computeOnce :: (SampleRate -> a) -> Sound d (a -> b) -> Sound d b
+computeOnce f = mapComputation $ \c sr ->
+  let a = f sr
+      c' = c sr
+   in \cs -> c' cs a
+{-# INLINE computeOnce #-}
 
 sequentially2 :: Sound T a -> Sound T a -> Sound T a
 sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ \sr ->
-  let factor = coerce $ d1 / (d1 + d2)
+  let factor = d1 / (d1 + d2)
       splitIndex =
         round $ factor * fromIntegral sr.samples
       f1 = c1 $ sr {samples = splitIndex}
       f2 = c2 $ sr {samples = sr.samples - splitIndex}
    in \cr ->
-        if cindex < splitIndex
+        if cr.index < splitIndex
           then f1 cr
           else f2 $ cr {index = cr.index - splitIndex}
 {-# INLINE sequentially2 #-}
@@ -103,7 +102,7 @@ time = InfiniteSound $ \sr cs ->
 {-# INLINE time #-}
 
 progress :: Sound I Progress
-progress = InfiniteSound $ \_ cs -> cs.progress
+progress = InfiniteSound $ \sr cs -> fromIntegral cs.index / fromIntegral sr.samples
 {-# INLINE progress #-}
 
 sampleIndex :: Sound I Int
@@ -117,11 +116,11 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ \sr -
       f1 = c1 sr {samples = d1N}
       f2 = c2 sr {samples = d2N}
    in if d1 >= d2
-        then \cs -> f1 cs + if cs.progress <= d2Percentage then f2 cs {progress = cs.progress / d2Percentage} else 0
-        else \cs -> f2 cs + if cs.progress <= d1Percentage then f1 cs {progress = cs.progress / d1Percentage} else 0
+        then \cs -> f1 cs + if cs.index < d2N then f2 cs else 0
+        else \cs -> f2 cs + if cs.index < d1N then f1 cs else 0
   where
-    d1Percentage = coerce $ d1 / newDuration
-    d2Percentage = coerce $ d2 / newDuration
+    d1Percentage = d1 / newDuration
+    d2Percentage = d2 / newDuration
     newDuration = max d1 d2
 parallel2 (InfiniteSound c1) (InfiniteSound c2) = InfiniteSound $ \sr ->
   let c1' = c1 sr
@@ -188,15 +187,15 @@ getDuration (TimedSound d _) = d
 reverseSound :: Sound d a -> Sound d a
 reverseSound = mapComputation $ \c sr ->
   let c' = c sr
-   in \cs -> c' cs {progress = 1 - cs.progress}
+   in \cs -> c' cs {index = pred sr.samples - cs.index}
 
 dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD c) = TimedSound (originalD - dropD) $ \sr ->
-  let c' = c sr {samples = traceShowId $ paddedSamples sr}
-      index i = i + (paddedSamples sr - sr.samples)
-   in \cs -> c' $ traceShow (cs, index $ cs.index) $ 
-    let !x = cs {progress = coerce droppedFactor + cs.progress * coerce factor, index = index cs.index }
-    in x
+  let c' = c sr {samples = paddedSamples sr}
+   in \cs ->
+        c' $
+          let !x = cs {index = cs.index + paddedSamples sr - sr.samples}
+           in x
   where
     dropD = max 0 $ min originalD dropD'
     droppedFactor = dropD / originalD
@@ -206,7 +205,7 @@ dropSound dropD' (TimedSound originalD c) = TimedSound (originalD - dropD) $ \sr
 takeSound :: Duration -> Sound T a -> Sound T a
 takeSound takeD' (TimedSound originalD c) = TimedSound takeD $ \sr ->
   let c' = c sr {samples = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)}
-   in \cs -> c' cs {progress = cs.progress * coerce factor}
+   in c'
   where
     takeD = max 0 $ min takeD' originalD
     factor = takeD / originalD
@@ -214,7 +213,17 @@ takeSound takeD' (TimedSound originalD c) = TimedSound takeD $ \sr ->
 changeTempo :: (Progress -> Progress) -> Sound d a -> Sound d a
 changeTempo f = mapComputation $ \c sr ->
   let c' = c sr
-   in \cs -> c' cs {progress = f $ cs.progress}
+   in c' . changeIndex sr
+  where
+    changeIndex sr cs =
+      cs
+        { index =
+            min sr.samples $
+              round $
+                f
+                  (fromIntegral cs.index / fromIntegral sr.samples)
+                  * fromIntegral sr.samples
+        }
 
 mapComputation :: ((SampleRate -> CurrentSample -> a) -> SampleRate -> CurrentSample -> b) -> Sound d a -> Sound d b
 mapComputation f (InfiniteSound c) = InfiniteSound $ f c
@@ -228,8 +237,7 @@ data Kernel p = Kernel
 
 convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse
 convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \c sr ->
-  let wholeSound = V.generate (sr.samples) $ \index ->
-        c sr $ csFromSr sr index
+  let wholeSound = V.generate (sr.samples) $ c sr . CurrentSample
       size = ceiling $ sizeP * fromIntegral sr.samples
       offset = round $ offsetP * fromIntegral sr.samples
       f = convolveOnce size offset wholeSound
@@ -243,7 +251,7 @@ convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \c sr ->
               else V.generate size $ \i -> coefficients (fromIntegral i / fromIntegral (size - 1))
           get i = fromMaybe 0 $ vector V.!? i
           indices = [0 .. size - 1]
-       in \i -> 
+       in \i ->
             sum $
               (\x -> get (i + x + offset) * coerce (computedCoefficients V.! x))
                 <$> indices

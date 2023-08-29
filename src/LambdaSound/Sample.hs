@@ -17,10 +17,12 @@ harmonic2 :: Hz -> Sound I Pulse
 harmonic2 hz = parallel $ (\x -> reduce (logBase 2 (x + 1)) $ pulse (coerce x * hz)) <$> take 6 [1 ..]
 
 noise :: Int -> Sound I Pulse
-noise initial = InfiniteSound $ \sr ->
-  let noiseVector =
+noise initial =
+  computeOnce
+    ( \sr ->
         V.unfoldrExactN
           sr.samples
           (R.uniformR (-1, 1))
           (mkStdGen initial)
-   in \cs -> Pulse $ noiseVector V.! cs.index
+    )
+    (fmap Pulse . flip (V.!) <$> sampleIndex)

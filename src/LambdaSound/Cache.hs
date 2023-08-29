@@ -45,7 +45,7 @@ cacheComputation c = do
             writeIORef fileContent $ Just floats
             pure $ Pulse $ floats V.! cs.index
           else
-            let pulses = V.generate sr.samples $ c sr . csFromSr sr
+            let pulses = V.generate sr.samples $ c sr . coerce
              in do
                   BL.writeFile filePath $ encode @[Float] $ coerce $ V.toList pulses
                   pure $ pulses V.! cs.index
@@ -53,4 +53,4 @@ cacheComputation c = do
 cacheKey :: (SampleRate -> CurrentSample -> Pulse) -> Word64
 cacheKey c =
   let sr = SampleRate 1 50
-   in sum $ round . (* 1000) . c sr . csFromSr sr <$> [0 .. 49]
+   in sum $ round . (* 1000) . c sr . CurrentSample <$> [0 .. 49]
