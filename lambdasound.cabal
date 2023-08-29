@@ -39,7 +39,10 @@ library
         filepath,
         binary,
         random,
-        massiv
+        massiv,
+        zlib,
+        wave,
+        proteaaudio-sdl
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,
@@ -49,7 +52,7 @@ library
         TypeFamilies
     default-language: GHC2021
 
-executable lambdasound-exe
+executable example
     import:           warnings
     main-is:          Main.hs
     -- other-modules:
@@ -59,7 +62,7 @@ executable lambdasound-exe
         lambdasound
     default-extensions:
         DataKinds
-    hs-source-dirs:   app
+    hs-source-dirs:   example
     default-language: GHC2021
 
 test-suite lambdasound-test

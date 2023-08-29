@@ -1,5 +1,6 @@
 module LambdaSound.Cache (cache) where
 
+import Codec.Compression.GZip (compress, decompress)
 import Data.Binary (decode, encode)
 import Data.ByteString.Lazy qualified as BL
 import Data.Coerce (coerce)
@@ -13,7 +14,8 @@ import System.FilePath (joinPath)
 
 -- | Caches a sound. If the sound is cached, then
 -- the sound gets read from the XDG data directory and does not have to
--- be computed again. Might load a cached sound which is not the same
+-- be computed again. 
+-- It might load a cached sound which is not the same
 -- as the computed one, but this should be very unlikely
 cache :: Sound d Pulse -> Sound d Pulse
 cache = unsafePerformIO . cacheIO
@@ -41,13 +43,13 @@ cacheComputation c = do
         if exists
           then do
             file <- BL.readFile filePath
-            let floats = V.fromList $ decode file
+            let floats = V.fromList $ decode $ decompress file
             writeIORef fileContent $ Just floats
             pure $ Pulse $ floats V.! cs.index
           else
             let pulses = V.generate sr.samples $ c sr . coerce
              in do
-                  BL.writeFile filePath $ encode @[Float] $ coerce $ V.toList pulses
+                  BL.writeFile filePath $ compress $ encode @[Float] $ coerce $ V.toList pulses
                   pure $ pulses V.! cs.index
 
 cacheKey :: (SampleRate -> CurrentSample -> Pulse) -> Word64

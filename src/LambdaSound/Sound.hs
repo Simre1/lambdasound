@@ -1,38 +1,96 @@
-module LambdaSound.Sound where
+module LambdaSound.Sound
+  ( -- ** Sound
+    Sound (..),
+    SoundDuration (..),
+    Pulse (..),
+    Duration (..),
+    Progress (..),
+    Percentage (..),
+    SampleRate (..),
+    CurrentSample (..),
+    DetermineDuration,
+
+    -- ** Combinators
+    sequentially2,
+    (>>>),
+    sequentially,
+    parallel2,
+    parallel,
+    zipSound,
+    zipSoundWith,
+    amplify,
+    reduce,
+    raise,
+    diminish,
+    setDuration,
+    (=|>),
+    getDuration,
+    scaleDuration,
+    reverseSound,
+    dropSound,
+    takeSound,
+    changeTempo,
+
+    -- ** Convolution
+    Kernel (..),
+    convolve,
+    convolveDuration,
+
+    -- ** Making new sounds
+    time,
+    progress,
+    sampleIndex,
+    computeOnce,
+    computeWholeSound,
+    constant,
+    silence,
+  )
+where
 
 import Data.Coerce
 import Data.Foldable (foldl')
 import Data.Maybe (fromMaybe)
 import Data.Vector qualified as V
-import Debug.Trace
 
+-- | An audio sample
 newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
 
+-- | The duration of a 'Sound'
 newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
 
+-- | The progress of a 'Sound'. A sound progresses from '0' to '1'
+-- while it plays.
 newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
 
+-- | The percentage of a 'Sound'. '0.3' corresponds to 30% of a 'Sound'.
 newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
 
+-- | Gives information about how many samples are needed during computation
 data SampleRate = SampleRate
   { period :: !Float,
     samples :: !Int
   }
   deriving (Show)
 
+-- | Contains the index of the sample currently being computed
 newtype CurrentSample = CurrentSample
   { index :: Int
   }
   deriving (Show)
 
+-- | Some 'Sound's have a different while others do not.
+-- 'I'nfinite 'Sound's have no duration
+-- 'T'imed 'Sound's have a duration
 data SoundDuration = I | T
 
+-- | Determines the duration of two sounds when they are combined
 type family DetermineDuration (d1 :: SoundDuration) (d2 :: SoundDuration) where
   DetermineDuration I d = d
   DetermineDuration d I = d
   DetermineDuration T _ = T
   DetermineDuration _ T = T
 
+-- | A 'Sound' represent a computation to generate audio samples
 data Sound (d :: SoundDuration) a where
   TimedSound ::
     !Duration ->
@@ -58,6 +116,7 @@ instance Functor (Sound d) where
   {-# INLINE fmap #-}
 
 instance Semigroup (Sound d Pulse) where
+  -- \| Combines two sounds in a parallel manner (see 'parallel2')
   (<>) = parallel2
   {-# INLINE (<>) #-}
 
@@ -69,13 +128,39 @@ instance Monoid (Sound T Pulse) where
   mempty = TimedSound 0 $ \_ _ -> 0
   {-# INLINE mempty #-}
 
+instance (Num a) => Num (Sound I a) where
+  (+) = zipSoundWith (+)
+  (*) = zipSoundWith (*)
+  (-) = zipSoundWith (-)
+  abs = fmap abs
+  fromInteger x = constant $ fromInteger x
+  signum = fmap signum
+  negate = fmap negate
+  {-# INLINE (+) #-}
+  {-# INLINE (-) #-}
+  {-# INLINE (*) #-}
+  {-# INLINE abs #-}
+  {-# INLINE fromInteger #-}
+  {-# INLINE signum #-}
+  {-# INLINE negate #-}
+
+-- | Compute a value once and then reuse it while computing all samples
 computeOnce :: (SampleRate -> a) -> Sound d (a -> b) -> Sound d b
 computeOnce f = mapComputation $ \c sr ->
   let a = f sr
       c' = c sr
-   in \cs -> c' cs a
+   in flip c' a
 {-# INLINE computeOnce #-}
 
+-- | Compute a whole sound so that you can look into the past and future
+-- of a sound (e.g. IIR filter).
+computeWholeSound :: (V.Vector a -> Int -> b) -> Sound d a -> Sound d b
+computeWholeSound f = mapComputation $ \c sr ->
+  let c' = c sr
+      a = V.generate (sr.samples) $ c' . CurrentSample
+   in \cs -> f a cs.index
+
+-- | Append two sounds. This is only possible for sounds with a duration.
 sequentially2 :: Sound T a -> Sound T a -> Sound T a
 sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ \sr ->
   let factor = d1 / (d1 + d2)
@@ -89,26 +174,35 @@ sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ \sr
           else f2 $ cr {index = cr.index - splitIndex}
 {-# INLINE sequentially2 #-}
 
+-- | Same as 'sequentially2'
 (>>>) :: Sound T a -> Sound T a -> Sound T a
 (>>>) = sequentially2
 
+-- | Combine a list of sounds in a sequential manner.
 sequentially :: [Sound T Pulse] -> Sound T Pulse
 sequentially = foldl' sequentially2 mempty
 {-# INLINE sequentially #-}
 
+-- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
 time :: Sound I Float
 time = InfiniteSound $ \sr cs ->
   fromIntegral cs.index * sr.period
 {-# INLINE time #-}
 
+-- | Get the 'Progress' of a 'Sound'.
+-- 'Progress' of '0' means that the sound has just started
+-- 'Progress' of '1' means that the sound has finished
+-- 'Progress' greater than '1' or smaller than '0' is invalid
 progress :: Sound I Progress
 progress = InfiniteSound $ \sr cs -> fromIntegral cs.index / fromIntegral sr.samples
 {-# INLINE progress #-}
 
+-- | Tells you the sample index for each sample
 sampleIndex :: Sound I Int
 sampleIndex = InfiniteSound $ \_ cs -> cs.index
 {-# INLINE sampleIndex #-}
 
+-- | Combine two sounds such that they play in parallel
 parallel2 :: Sound d Pulse -> Sound d Pulse -> Sound d Pulse
 parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ \sr ->
   let d1N = round $ d1Percentage * fromIntegral sr.samples
@@ -128,17 +222,22 @@ parallel2 (InfiniteSound c1) (InfiniteSound c2) = InfiniteSound $ \sr ->
    in \cs -> c1' cs + c2' cs
 {-# INLINE parallel2 #-}
 
+-- | Combine a lists of sounds such that they play in parallel
 parallel :: (Monoid (Sound d Pulse)) => [Sound d Pulse] -> Sound d Pulse
 parallel = foldl' parallel2 mempty
 {-# INLINE parallel #-}
 
+-- | A 'Sound' with '0' volume
 silence :: Sound I Pulse
 silence = InfiniteSound $ \_ _ -> 0
 {-# INLINE silence #-}
 
+-- | A constant 'Sound'
 constant :: a -> Sound I a
 constant a = InfiniteSound $ \_ _ -> a
 
+-- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
+-- to the duration of the shorter 'Sound', cutting away the excess samples from the longer one.
 zipSound :: Sound d1 (a -> b) -> Sound d2 a -> Sound (DetermineDuration d1 d2) b
 zipSound sound1 sound2 =
   case (sound1, sound2) of
@@ -156,14 +255,23 @@ zipSound sound1 sound2 =
        in \cs -> ff cs (fa cs)
 {-# INLINE zipSound #-}
 
+-- | Similar to 'zipSound'
+zipSoundWith :: (a -> b -> c) -> Sound d1 a -> Sound d2 b -> Sound (DetermineDuration d1 d2) c
+zipSoundWith f s1 = zipSound (f <$> s1)
+{-# INLINE zipSoundWith #-}
+
+-- | Amplifies the volume of the given 'Sound'
 amplify :: Float -> Sound d Pulse -> Sound d Pulse
 amplify x = fmap (* coerce x)
 {-# INLINE amplify #-}
 
+-- | Reduces the volume of the given 'Sound'
 reduce :: Float -> Sound d Pulse -> Sound d Pulse
 reduce x = amplify (1 / x)
 {-# INLINE reduce #-}
 
+-- | Raises the frequency of the 'Sound' by the given factor.
+-- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
 raise :: Float -> Sound d Pulse -> Sound d Pulse
 raise x (TimedSound d c) = TimedSound d $ \sr ->
   c $ sr {period = coerce x * sr.period}
@@ -171,24 +279,45 @@ raise x (InfiniteSound c) = InfiniteSound $ \sr ->
   c $ sr {period = coerce x * sr.period}
 {-# INLINE raise #-}
 
+-- | Diminishes the frequency of the 'Sound' by the given factor
+-- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
 diminish :: Float -> Sound d Pulse -> Sound d Pulse
 diminish x = raise $ 1 / x
 {-# INLINE diminish #-}
 
+-- | Sets the duration of the 'Sound', scaling it
+-- such that the previous sound fits within the resulting one.
+-- The resuling sound is a 'T'imed 'Sound'.
 setDuration :: Duration -> Sound d a -> Sound T a
 setDuration d (TimedSound _ c) = TimedSound d c
 setDuration d (InfiniteSound c) = TimedSound d c
 {-# INLINE setDuration #-}
 
+-- | Same as `setDuration` but in operator form
+(=|>) :: Duration -> Sound d a -> Sound 'T a
+(=|>) = setDuration
+{-# INLINE (=|>) #-}
+
+-- | Scales the 'Duration' of a 'Sound'.
+-- The following makes a sound twice as long:
+-- > scaleDuration 2 sound
+scaleDuration :: Float -> Sound T a -> Sound T a
+scaleDuration x (TimedSound d c) = TimedSound (coerce x * d) c
+{-# INLINE scaleDuration #-}
+
+-- | Get the duration of a 'T'imed 'Sound'
 getDuration :: Sound T a -> Duration
 getDuration (TimedSound d _) = d
 {-# INLINE getDuration #-}
 
+-- | Reverses a 'Sound' similar to 'reverse' for lists
 reverseSound :: Sound d a -> Sound d a
 reverseSound = mapComputation $ \c sr ->
   let c' = c sr
    in \cs -> c' cs {index = pred sr.samples - cs.index}
+{-# INLINE reverseSound #-}
 
+-- | Drop parts of a sound similar to 'drop' for lists
 dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD c) = TimedSound (originalD - dropD) $ \sr ->
   let c' = c sr {samples = paddedSamples sr}
@@ -201,7 +330,9 @@ dropSound dropD' (TimedSound originalD c) = TimedSound (originalD - dropD) $ \sr
     droppedFactor = dropD / originalD
     factor = 1 - droppedFactor
     paddedSamples sr = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
+{-# INLINE dropSound #-}
 
+-- | Take parts of a sound similar to 'take' for lists
 takeSound :: Duration -> Sound T a -> Sound T a
 takeSound takeD' (TimedSound originalD c) = TimedSound takeD $ \sr ->
   let c' = c sr {samples = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)}
@@ -209,7 +340,13 @@ takeSound takeD' (TimedSound originalD c) = TimedSound takeD $ \sr ->
   where
     takeD = max 0 $ min takeD' originalD
     factor = takeD / originalD
+{-# INLINE takeSound #-}
 
+-- | Change how the 'Sound' progresses. For example, you can slow it
+-- down in the beginning and speed it up at the end. However, the total
+-- duration stays the same.
+--
+-- Negative 'Progress' is treated as '0' and 'Progress' above '1' is treated as '1'
 changeTempo :: (Progress -> Progress) -> Sound d a -> Sound d a
 changeTempo f = mapComputation $ \c sr ->
   let c' = c sr
@@ -224,17 +361,21 @@ changeTempo f = mapComputation $ \c sr ->
                   (fromIntegral cs.index / fromIntegral sr.samples)
                   * fromIntegral sr.samples
         }
+{-# INLINE changeTempo #-}
 
 mapComputation :: ((SampleRate -> CurrentSample -> a) -> SampleRate -> CurrentSample -> b) -> Sound d a -> Sound d b
 mapComputation f (InfiniteSound c) = InfiniteSound $ f c
 mapComputation f (TimedSound d c) = TimedSound d $ f c
 
+-- | A Kernel for convolution
 data Kernel p = Kernel
   { coefficients :: Percentage -> Float,
     size :: p,
     offset :: p
   }
 
+-- | Convolvution of a 'Sound' where the 'Kernel' size is
+-- determined by 'Percentage's of the sound
 convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse
 convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \c sr ->
   let wholeSound = V.generate (sr.samples) $ c sr . CurrentSample
@@ -255,9 +396,13 @@ convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \c sr ->
             sum $
               (\x -> get (i + x + offset) * coerce (computedCoefficients V.! x))
                 <$> indices
+{-# INLINE convolve #-}
 
+-- | Convolvution of a 'Sound' where the 'Kernel' size is
+-- determined by a 'Duration'.
 convolveDuration :: Kernel Duration -> Sound T Pulse -> Sound T Pulse
 convolveDuration (Kernel coefficients sizeD offsetD) sound@(TimedSound d _) =
   convolve
     (Kernel coefficients (coerce $ sizeD / d) (coerce $ offsetD / d))
     sound
+{-# INLINE convolveDuration #-}

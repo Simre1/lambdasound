@@ -2,11 +2,14 @@ module Main where
 
 import LambdaSound
 
-song :: Sound T Pulse
-song = melody <> background 
+main :: IO ()
+main = do
+  let sampleRate = 44100
+      volume = 0.4
+  play sampleRate volume song
 
-upwards :: Sound T Pulse
-upwards = setDuration 2.5 $ sequentially $ note <$> [c4, d4, e4, f4, g4]
+song :: Sound T Pulse
+song = cache $ melody <> background 
 
 background :: Sound T Pulse
 background =
@@ -34,12 +37,13 @@ melody =
 note :: Semitone -> Sound T Pulse
 note st = setDuration 1 $ easeInOut 4 $ asNote harmonic st
 
-main :: IO ()
-main = do
-  play 44000 song
+-- Further examples
+
+upwards :: Sound T Pulse
+upwards = speedUp $ setDuration 2.5 $ sequentially $ note <$> [c4, d4, e4, f4, g4]
 
 metronome :: Sound T Pulse
 metronome = repeatSound 10 $ setDuration 1 $ note c4 >>> setDuration 2 silence
 
-speedup :: Sound T Pulse -> Sound T Pulse
-speedup = changeTempo $ \p -> p ** 2
+speedUp :: Sound T Pulse -> Sound T Pulse
+speedUp = changeTempo $ \p -> p ** 2

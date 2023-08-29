@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Control.Monad (guard, join, unless)
+import Control.Monad (join, unless)
 import Data.List.NonEmpty
 import Data.Vector qualified as V
 import LambdaSound
@@ -19,7 +19,8 @@ main =
         testProperty "associative parallel" associativeParallel,
         testProperty "distributivity of parallel and sequence" distributivityParallelSequence,
         testProperty "takeSound" takeSoundProperty,
-        testProperty "dropSound" dropSoundProperty
+        testProperty "dropSound" dropSoundProperty,
+        testProperty "take/drop" dropTakeSoundDuality
       ]
 
 genSound :: Gen (Sound T Pulse)
@@ -90,11 +91,18 @@ dropSoundProperty :: Property ()
 dropSoundProperty = do
   sound1 <- setDuration 1 <$> gen genSound
   sound2 <- setDuration 1 <$> gen genSound
+  unless (dropSound 1 (sound1 >>> sound2) `eqSound` sound2) $
+    testFailed "dropSound failed"
+    
+dropTakeSoundDuality :: Property ()
+dropTakeSoundDuality = do
+  sound1 <- setDuration 1 <$> gen genSound
+  sound2 <- setDuration 1 <$> gen genSound
   unless
     ( dropSound 1 (sound1 >>> sound2)
         `eqSound` reverseSound (takeSound 1 (reverseSound $ sound1 >>> sound2))
     )
-    $ testFailed "dropSound failed"
+    $ testFailed "drop/take duality failed"
 
 eqSound :: (HasCallStack, Eq a) => Sound T a -> Sound T a -> Bool
 eqSound s1 s2 = sampleSound (Hz 100) s1 == sampleSound (Hz 100) s2
