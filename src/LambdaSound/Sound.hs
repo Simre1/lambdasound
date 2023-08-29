@@ -4,6 +4,7 @@ import Data.Coerce
 import Data.Foldable (foldl')
 import Data.Maybe (fromMaybe)
 import Data.Vector qualified as V
+import Debug.Trace
 
 newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
 
@@ -16,12 +17,11 @@ newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractio
 data SampleRate = SampleRate
   { period :: !Float,
     samples :: !Int
-  }
+  } deriving Show
 
-data CurrentSample = CurrentSample
-  { index :: !Int,
-    progress :: !Progress
-  }
+newtype CurrentSample = CurrentSample
+  { index :: Int
+  } deriving Show
 
 csFromSr :: SampleRate -> Int -> CurrentSample
 csFromSr sr i = CurrentSample i (fromIntegral i / fromIntegral (sr.samples - 1))
@@ -42,6 +42,16 @@ data Sound (d :: SoundDuration) a where
   InfiniteSound ::
     (SampleRate -> CurrentSample -> a) ->
     Sound I a
+
+instance Show a => Show (Sound d a) where
+  show (TimedSound d c) = showSampledCompute d c
+  show (InfiniteSound c) = showSampledCompute 3 c
+
+showSampledCompute :: Show a => Duration -> (SampleRate -> CurrentSample -> a) -> String
+showSampledCompute d c = 
+  let c' = c sr
+      sr = SampleRate (1/25) (ceiling $ d * 25)
+  in show $ V.generate (ceiling $ d * 25) $ c' . csFromSr sr
 
 instance Functor (Sound d) where
   fmap f (TimedSound d c) = TimedSound d $ \sr -> f . c sr
@@ -75,9 +85,9 @@ sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ \sr
       f1 = c1 $ sr {samples = splitIndex}
       f2 = c2 $ sr {samples = sr.samples - splitIndex}
    in \cr ->
-        if cr.progress < factor
-          then f1 $ cr {progress = cr.progress * (1 / factor)}
-          else f2 $ cr {index = cr.index - splitIndex, progress = (cr.progress - factor) * (1 / (1 - factor))}
+        if cindex < splitIndex
+          then f1 cr
+          else f2 $ cr {index = cr.index - splitIndex}
 {-# INLINE sequentially2 #-}
 
 (>>>) :: Sound T a -> Sound T a -> Sound T a
@@ -107,8 +117,8 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ \sr -
       f1 = c1 sr {samples = d1N}
       f2 = c2 sr {samples = d2N}
    in if d1 >= d2
-        then \cs -> f1 cs + if cs.progress < d2Percentage then f2 cs {progress = cs.progress / d2Percentage} else 0
-        else \cs -> f2 cs + if cs.progress < d1Percentage then f1 cs {progress = cs.progress / d1Percentage} else 0
+        then \cs -> f1 cs + if cs.progress <= d2Percentage then f2 cs {progress = cs.progress / d2Percentage} else 0
+        else \cs -> f2 cs + if cs.progress <= d1Percentage then f1 cs {progress = cs.progress / d1Percentage} else 0
   where
     d1Percentage = coerce $ d1 / newDuration
     d2Percentage = coerce $ d2 / newDuration
@@ -182,12 +192,16 @@ reverseSound = mapComputation $ \c sr ->
 
 dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD c) = TimedSound (originalD - dropD) $ \sr ->
-  let c' = c sr {samples = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)}
-   in \cs -> c' cs {progress = coerce droppedFactor + cs.progress * coerce factor}
+  let c' = c sr {samples = traceShowId $ paddedSamples sr}
+      index i = i + (paddedSamples sr - sr.samples)
+   in \cs -> c' $ traceShow (cs, index $ cs.index) $ 
+    let !x = cs {progress = coerce droppedFactor + cs.progress * coerce factor, index = index cs.index }
+    in x
   where
     dropD = max 0 $ min originalD dropD'
     droppedFactor = dropD / originalD
     factor = 1 - droppedFactor
+    paddedSamples sr = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
 
 takeSound :: Duration -> Sound T a -> Sound T a
 takeSound takeD' (TimedSound originalD c) = TimedSound takeD $ \sr ->
