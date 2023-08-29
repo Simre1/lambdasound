@@ -65,7 +65,7 @@ You can also take a look at `example/Main.hs` for a bigger example and play it w
 - [x] Scaling speed
 - [x] take/drop for sounds
 - [x] More Semitones
-- [x] Better caching
+- [x] Caching
 
 ## Wanted Features
 
