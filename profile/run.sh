@@ -1,5 +1,5 @@
 rm profile/lambdasound.*
-cabal run --enable-profiling lambdasound-profile -- +RTS -s -hy &&
+cabal run --enable-profiling lambdasound-profile -- +RTS -s -hc -p &&
 mv lambdasound-profile.* profile &&
 cd profile &&
 hp2ps -c lambdasound-profile.hp &&

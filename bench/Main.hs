@@ -14,7 +14,9 @@ main =
           bench "Some Sounds" $ nfSound someSounds,
           bench "Noise" $ nfSound noiseSound,
           bench "Convolution" $ nfSound convolutionSound,
-          bench "long Sound" $ nfSound longSound
+          bench "long Sound" $ nfSound longSound,
+          bench "evaluated Sound" $ nfSound evaluatedSound,
+          bench "unevaluated Sound" $ nfSound unEvaluatedSound
         ]
     ]
 
@@ -34,6 +36,16 @@ someSounds =
       1 |-> harmonic 200,
       1 |-> harmonic 2000
     ]
+
+unEvaluatedSound :: Sound T Pulse
+unEvaluatedSound = repeatSound 10 note
+  where 
+    note = setDuration 1 $ harmonic 440
+
+evaluatedSound :: Sound T Pulse
+evaluatedSound = repeatSound 10 note
+  where 
+    note = evaluate $ setDuration 1 $ harmonic 440
 
 noiseSound :: Sound T Pulse
 noiseSound = 3 |-> noise 42

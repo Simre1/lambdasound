@@ -30,6 +30,7 @@ module LambdaSound.Sound
     dropSound,
     takeSound,
     changeTempo,
+    evaluate,
 
     -- ** Convolution
     Kernel (..),
@@ -377,6 +378,11 @@ data Kernel p = Kernel
     offset :: p
   }
 
+evaluate :: Sound d Pulse -> Sound d Pulse
+evaluate = mapComputation $ \c sr ->
+  let !wholeSound = M.compute @M.S $ M.generate M.Seq (M.Sz1 sr.samples) $ c' . coerce
+      c' = c sr
+  in \cs -> wholeSound M.! cs.index
 -- | Convolvution of a 'Sound' where the 'Kernel' size is
 -- determined by 'Percentage's of the sound
 convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse

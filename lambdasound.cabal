@@ -81,6 +81,7 @@ executable lambdasound-profile
         DataKinds
     hs-source-dirs:   profile
     default-language: GHC2021
+    ghc-options: -O2
 
 test-suite lambdasound-test
     import:           warnings
