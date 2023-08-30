@@ -2,11 +2,11 @@ module Main (main) where
 
 import Control.Monad (join, unless)
 import Data.List.NonEmpty
-import Data.Vector qualified as V
 import LambdaSound
 import Test.Falsify.Generator qualified as Gen
 import Test.Tasty
 import Test.Tasty.Falsify
+import  Data.Massiv.Array qualified as M
 import GHC.Stack (HasCallStack)
 
 main :: IO ()
@@ -104,13 +104,13 @@ dropTakeSoundDuality = do
     )
     $ testFailed "drop/take duality failed"
 
-eqSound :: (HasCallStack, Eq a) => Sound T a -> Sound T a -> Bool
+eqSound :: Sound T Pulse -> Sound T Pulse -> Bool
 eqSound s1 s2 = sampleSound (Hz 100) s1 == sampleSound (Hz 100) s2
 
 almostEqSound :: Sound T Pulse -> Sound T Pulse -> Bool
 almostEqSound s1 s2 =
   let x = sampleSound (Hz 100) s1
       y = sampleSound (Hz 100) s2
-   in V.all (\a -> abs a < epsilon) $ V.zipWith (-) x y
+   in M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
   where
     epsilon = 5e-6

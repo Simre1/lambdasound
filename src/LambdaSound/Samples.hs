@@ -1,7 +1,7 @@
-module LambdaSound.Sample where
+module LambdaSound.Samples where
 
 import Data.Coerce
-import Data.Vector qualified as V
+import Data.Vector.Storable qualified as V
 import LambdaSound.Sound
 import System.Random as R
 

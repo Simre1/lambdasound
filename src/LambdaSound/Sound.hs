@@ -23,7 +23,7 @@ module LambdaSound.Sound
     raise,
     diminish,
     setDuration,
-    (=|>),
+    (|->),
     getDuration,
     scaleDuration,
     reverseSound,
@@ -47,23 +47,26 @@ module LambdaSound.Sound
   )
 where
 
+import Control.DeepSeq (NFData)
 import Data.Coerce
 import Data.Foldable (foldl')
-import Data.Maybe (fromMaybe)
-import Data.Vector qualified as V
+import Data.Functor ((<&>))
+import Data.Massiv.Array qualified as M
+
+import Foreign.Storable (Storable)
 
 -- | An audio sample
-newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
+newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
 
 -- | The duration of a 'Sound'
-newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
+newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
 
 -- | The progress of a 'Sound'. A sound progresses from '0' to '1'
 -- while it plays.
-newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
+newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
 
 -- | The percentage of a 'Sound'. '0.3' corresponds to 30% of a 'Sound'.
-newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac)
+newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
 
 -- | Gives information about how many samples are needed during computation
 data SampleRate = SampleRate
@@ -108,7 +111,7 @@ showSampledCompute :: (Show a) => Duration -> (SampleRate -> CurrentSample -> a)
 showSampledCompute d c =
   let c' = c sr
       sr = SampleRate (1 / 25) (ceiling $ d * 25)
-   in show $ V.generate (ceiling $ d * 25) $ c' . CurrentSample
+   in show $ M.generate M.Seq (M.Sz1 $ ceiling $ d * 25) $ c' . CurrentSample
 
 instance Functor (Sound d) where
   fmap f (TimedSound d c) = TimedSound d $ \sr -> f . c sr
@@ -154,11 +157,11 @@ computeOnce f = mapComputation $ \c sr ->
 
 -- | Compute a whole sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
-computeWholeSound :: (V.Vector a -> Int -> b) -> Sound d a -> Sound d b
+computeWholeSound :: (M.Vector M.D a -> CurrentSample -> b) -> Sound d a -> Sound d b
 computeWholeSound f = mapComputation $ \c sr ->
   let c' = c sr
-      a = V.generate (sr.samples) $ c' . CurrentSample
-   in \cs -> f a cs.index
+      a = M.generate M.Seq (M.Sz1 sr.samples) $ c' . CurrentSample
+   in f a
 
 -- | Append two sounds. This is only possible for sounds with a duration.
 sequentially2 :: Sound T a -> Sound T a -> Sound T a
@@ -294,9 +297,9 @@ setDuration d (InfiniteSound c) = TimedSound d c
 {-# INLINE setDuration #-}
 
 -- | Same as `setDuration` but in operator form
-(=|>) :: Duration -> Sound d a -> Sound 'T a
-(=|>) = setDuration
-{-# INLINE (=|>) #-}
+(|->) :: Duration -> Sound d a -> Sound 'T a
+(|->) = setDuration
+{-# INLINE (|->) #-}
 
 -- | Scales the 'Duration' of a 'Sound'.
 -- The following makes a sound twice as long:
@@ -378,27 +381,27 @@ data Kernel p = Kernel
 -- determined by 'Percentage's of the sound
 convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse
 convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \c sr ->
-  let wholeSound = V.generate (sr.samples) $ c sr . CurrentSample
-      size = ceiling $ sizeP * fromIntegral sr.samples
+  let size = ceiling $ sizeP * fromIntegral sr.samples
       offset = round $ offsetP * fromIntegral sr.samples
-      f = convolveOnce size offset wholeSound
-   in \cs -> f cs.index
-  where
-    convolveOnce :: Int -> Int -> V.Vector Pulse -> Int -> Pulse
-    convolveOnce size offset vector =
-      let computedCoefficients =
-            if size <= 1
-              then V.singleton 0.5
-              else V.generate size $ \i -> coefficients (fromIntegral i / fromIntegral (size - 1))
-          get i = fromMaybe 0 $ vector V.!? i
-          indices = [0 .. size - 1]
-       in \i ->
-            sum $
-              (\x -> get (i + x + offset) * coerce (computedCoefficients V.! x))
-                <$> indices
+      
+      c' = c sr
+      wholeSound = M.compute @M.S $ M.generate M.Seq (M.Sz1 sr.samples) $ c' . CurrentSample
+      
+      stencil = M.makeStencil (M.Sz1 size) offset $ \get ->
+        sum $ [0 .. pred size] <&> \i -> get (i - offset) * (computedCoefficients M.! i)
+      computedCoefficients =
+        M.compute @M.S $
+          if size <= 1
+            then M.singleton 0.5
+            else M.generate M.Seq (M.Sz1 size) $ \i ->
+              coerce @_ @Pulse $
+                coefficients (fromIntegral i / fromIntegral (size - 1))
+
+      convolved = M.compute @M.S $ M.mapStencil M.Reflect stencil wholeSound
+   in \cs -> convolved M.! cs.index
 {-# INLINE convolve #-}
 
--- | Convolvution of a 'Sound' where the 'Kernel' size is
+-- | Convolution of a 'Sound' where the 'Kernel' size is
 -- determined by a 'Duration'.
 convolveDuration :: Kernel Duration -> Sound T Pulse -> Sound T Pulse
 convolveDuration (Kernel coefficients sizeD offsetD) sound@(TimedSound d _) =

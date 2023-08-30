@@ -14,6 +14,9 @@ module LambdaSound
     -- * Sound samples
     module Sample,
 
+    -- * Sampling sounds,
+    module Sampling,
+
     -- * Cache sounds
     module Cache,
   )
@@ -23,5 +26,6 @@ import LambdaSound.Cache as Cache
 import LambdaSound.Effect as Effect
 import LambdaSound.Note as Note
 import LambdaSound.Play as Play
-import LambdaSound.Sample as Sample
+import LambdaSound.Samples as Sample
+import LambdaSound.Sampling as Sampling
 import LambdaSound.Sound as Sound

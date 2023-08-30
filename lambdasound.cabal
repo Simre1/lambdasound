@@ -21,11 +21,12 @@ library
     exposed-modules:  
         LambdaSound,
         LambdaSound.Sound,
-        LambdaSound.Sample,
+        LambdaSound.Samples,
         LambdaSound.Effect,
         LambdaSound.Play,
         LambdaSound.Note,
-        LambdaSound.Cache
+        LambdaSound.Cache,
+        LambdaSound.Sampling
     -- other-modules:
     -- other-extensions:
     build-depends:    
@@ -39,10 +40,12 @@ library
         filepath,
         binary,
         random,
-        massiv,
         zlib,
         wave,
-        proteaaudio-sdl
+        proteaaudio-sdl,
+        massiv,
+        bytestring-to-vector,
+        deepseq
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,
@@ -51,6 +54,7 @@ library
         DataKinds,
         TypeFamilies
     default-language: GHC2021
+    ghc-options: -O2
 
 executable example
     import:           warnings
@@ -63,6 +67,19 @@ executable example
     default-extensions:
         DataKinds
     hs-source-dirs:   example
+    default-language: GHC2021
+
+executable lambdasound-profile
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound
+    default-extensions:
+        DataKinds
+    hs-source-dirs:   profile
     default-language: GHC2021
 
 test-suite lambdasound-test
@@ -81,4 +98,22 @@ test-suite lambdasound-test
         tasty,
         tasty-hunit,
         falsify,
+        massiv
+
+test-suite lambdasound-bench
+    import:           warnings
+    default-language: GHC2021
+    -- other-modules:
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   bench
+    main-is:          Main.hs
+    default-extensions:
+        DataKinds
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound,
+        tasty,
+        tasty-bench,
         vector
+    ghc-options: -O2

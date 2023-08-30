@@ -1,10 +1,11 @@
 module Main where
 
-import Data.Coerce (coerce)
 import LambdaSound
 
 main :: IO ()
-main = play 44100 0.4 $ repeatSound 5 song
+main =
+  let !floats = sampleSound 44100 $ repeatSound 5 song
+   in pure ()
 
 song :: Sound T Pulse
 song = melody <> reduce 1.5 background
@@ -34,20 +35,3 @@ melody =
 
 note :: Semitone -> Sound T Pulse
 note st = setDuration 1 $ easeInOut 4 $ asNote harmonic st
-
--- Further examples
-
-metronome :: Sound T Pulse
-metronome = repeatSound 10 $ setDuration 1 $ note c4 >>> setDuration 2 silence
-
-upSound :: Sound T Pulse
-upSound =
-  zipSoundWith (*) ((\p -> 1 - coerce p) <$> progress) $
-    speedUp $
-      upwards >>> takeSound 2 (raiseSemitones 12 upwards) >>> setDuration 1 (note g5)
-
-upwards :: Sound T Pulse
-upwards = setDuration 3.5 $ sequentially $ note <$> [c4, d4, e4, f4, g4, a4, b4]
-
-speedUp :: Sound T Pulse -> Sound T Pulse
-speedUp = changeTempo $ \p -> p ** 2

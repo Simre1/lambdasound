@@ -29,5 +29,5 @@ reverb d = convolveDuration kernel
       Kernel
         { coefficients = \p -> coerce p ** 2,
           size = d,
-          offset = -d / 2
+          offset = d / 2
         }
