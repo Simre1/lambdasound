@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecursiveDo #-}
 
-module LambdaSound.Sound
+module LambdaSound.Sound2
   ( -- ** Sound
     Sound (..),
     SoundDuration (..),
@@ -45,27 +44,21 @@ module LambdaSound.Sound
     computeOnce,
     constant,
     silence,
-    runMSC,
   )
 where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Writer.CPS
 import Data.Coerce (coerce)
 import Data.Foldable (foldl')
-import Data.Functor.Identity
 import Data.Monoid (Sum (..))
-import Debug.Trace
-import Foreign (allocaBytes)
-import Foreign.Marshal (mallocBytes)
 import Foreign.Ptr
 import Foreign.Storable
-import System.IO.Unsafe (unsafePerformIO)
 
 -- | An audio sample
 newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
@@ -145,7 +138,6 @@ instance (Num a) => Num (Sound I a) where
 
 instance Functor (Sound d) where
   fmap f = mapComputation $ mapComputeSound f
-  {-# INLINE fmap #-}
 
 -- | Append two sounds. This is only possible for sounds with a duration.
 sequentially2 :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
@@ -153,17 +145,15 @@ sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ do
   sr <- getSR
   let factor = d1 / (d1 + d2)
       splitIndex =
-        round $
-          factor * fromIntegral sr.samples
+        round $ factor * fromIntegral sr.samples
   w1 <- withSR (sr {samples = splitIndex}) $ asWriteMemory c1
   w2 <- withSR (sr {samples = sr.samples - splitIndex}) $ asWriteMemory c2
-  pure $ WriteMemory $ \ptr -> w1 ptr >> w2 (ptr `plusPtr` (splitIndex * pulseSize))
+  pure $ WriteMemory $ \ptr -> w1 ptr >> w2 (ptr `plusPtr` splitIndex)
 {-# INLINE sequentially2 #-}
 
 -- | Same as 'sequentially2'
 (>>>) :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
 (>>>) = sequentially2
-{-# INLINE (>>>) #-}
 
 -- | Combine a list of sounds in a sequential manner.
 sequentially :: [Sound T Pulse] -> Sound T Pulse
@@ -213,7 +203,6 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ do
     d1Percentage = d1 / newDuration
     d2Percentage = d2 / newDuration
     newDuration = max d1 d2
-{-# INLINE parallel2 #-}
 
 -- | Combine a lists of sounds such that they play in parallel
 parallel :: (Monoid (Sound d Pulse)) => [Sound d Pulse] -> Sound d Pulse
@@ -228,7 +217,6 @@ silence = constant 0
 -- | A constant 'Sound'
 constant :: a -> Sound I a
 constant a = InfiniteSound $ pure $ IndexCompute $ pure $ const $ pure a
-{-# INLINE constant #-}
 
 -- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
 -- to the duration of the shorter 'Sound', cutting away the excess samples from the longer one.
@@ -348,30 +336,25 @@ changeTempo f = mapComputation $ \msc -> do
 mapComputation :: (MSC (ComputeSound a) -> MSC (ComputeSound b)) -> Sound d a -> Sound d b
 mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
 mapComputation f (TimedSound d msc) = TimedSound d $ f msc
-{-# INLINE mapComputation #-}
 
-newtype MSC a = MSC (ReaderT SampleRate (WriterT (Sum Int) (State (Ptr Pulse))) a) deriving (Functor, Applicative, Monad)
+newtype MSC a = MSC (ReaderT SampleRate (WriterT (Sum Int) (StateT (Ptr Pulse) IO)) a) deriving (Functor, Applicative, Monad, MonadIO)
 
 getSR :: MSC SampleRate
 getSR = MSC ask
-{-# INLINE getSR #-}
 
 withSR :: SampleRate -> MSC a -> MSC a
 withSR sr (MSC r) = MSC $ local (const sr) r
-{-# INLINE withSR #-}
 
 arenaAllocate :: MSC (Ptr Pulse)
 arenaAllocate = do
   sr <- MSC ask
   MSC $ lift $ tell $ Sum sr.samples
   ptr <- MSC $ lift $ lift get
-  MSC $ lift $ lift $ put (ptr `plusPtr` (sr.samples * pulseSize))
+  MSC $ lift $ lift $ put (ptr `plusPtr` sr.samples)
   pure ptr
-{-# INLINE arenaAllocate #-}
 
 mapComputeSound :: (a -> b) -> MSC (ComputeSound a) -> MSC (ComputeSound b)
 mapComputeSound f cs = IndexCompute . fmap (fmap f .) <$> asIndexCompute cs
-{-# INLINE mapComputeSound #-}
 
 asIndexCompute :: MSC (ComputeSound a) -> MSC (IO (Int -> IO a))
 asIndexCompute msc =
@@ -381,37 +364,22 @@ asIndexCompute msc =
       ptr <- arenaAllocate
       pure $ do
         w ptr
-        pure $ \index -> peek (ptr `plusPtr` (index * pulseSize))
-{-# INLINE asIndexCompute #-}
+        pure $ \index -> peek (ptr `plusPtr` index)
 
 asWriteMemory :: MSC (ComputeSound Pulse) -> MSC (Ptr Pulse -> IO ())
 asWriteMemory mcs =
   mcs >>= \case
     IndexCompute ic -> do
       sr <- MSC ask
-      pure $ \ptr ->
-        when (sr.samples > 0) $ do
-          ic' <- ic
-          forM_ [0 .. pred sr.samples] $ \i -> do
-            v <- ic' i
-            poke (ptr `plusPtr` (i * pulseSize)) v
+      pure $ \ptr -> do
+        ic' <- ic
+        forM_ [0 .. pred sr.samples] $ \i ->
+          ic' i >>= poke (ptr `plusPtr` i)
     WriteMemory w -> pure w
-{-# INLINE asWriteMemory #-}
-
-pulseSize :: Int
-pulseSize = sizeOf (undefined :: Pulse)
 
 data ComputeSound a where
   WriteMemory :: (Ptr Pulse -> IO ()) -> ComputeSound Pulse
   IndexCompute :: (IO (Int -> IO a)) -> ComputeSound a
-
-runMSC :: SampleRate -> MSC (ComputeSound Pulse) -> Ptr Pulse -> IO ()
-runMSC sr msc samplePtr = mdo
-  let (MSC r) = asWriteMemory msc
-  -- arenaPtr <- mallocBytes (size * sizeOf (undefined :: Pulse))
-  let (writeSamples, Sum size) = evalState (runWriterT (runReaderT r sr)) $ unsafePerformIO $ mallocBytes (size * sizeOf (undefined :: Pulse))
-  writeSamples samplePtr
-{-# INLINE runMSC #-}
 
 zipWithCompute :: (a -> b -> c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
 zipWithCompute f msc1 msc2 = do
@@ -421,7 +389,6 @@ zipWithCompute f msc1 msc2 = do
     ic1' <- ic1
     ic2' <- ic2
     pure $ \i -> f <$> ic1' i <*> ic2' i
-{-# INLINE zipWithCompute #-}
 
 -- | A Kernel for convolution
 data Kernel p = Kernel

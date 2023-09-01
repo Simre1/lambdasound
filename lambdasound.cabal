@@ -21,6 +21,7 @@ library
     exposed-modules:  
         LambdaSound,
         LambdaSound.Sound,
+        LambdaSound.Sound2,
         LambdaSound.Samples,
         LambdaSound.Effect,
         LambdaSound.Play,
@@ -45,7 +46,8 @@ library
         proteaaudio-sdl,
         massiv,
         bytestring-to-vector,
-        deepseq
+        deepseq,
+        transformers
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,

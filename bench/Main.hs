@@ -21,7 +21,7 @@ main =
     ]
 
 nfSound :: Sound T Pulse -> Benchmarkable
-nfSound = nf $ sampleSound 44100
+nfSound = nfIO . sampleSound 44100
 
 simplePulse :: Sound T Pulse
 simplePulse = 3 |-> pulse 440
@@ -45,7 +45,7 @@ unEvaluatedSound = repeatSound 10 note
 evaluatedSound :: Sound T Pulse
 evaluatedSound = repeatSound 10 note
   where 
-    note = evaluate $ setDuration 1 $ harmonic 440
+    note = setDuration 1 $ harmonic 440
 
 noiseSound :: Sound T Pulse
 noiseSound = 3 |-> noise 42

@@ -4,24 +4,30 @@ import Codec.Audio.Wave
 import Data.ByteString.Builder qualified as B
 import Data.Coerce
 import Data.Massiv.Array qualified as M
+import Data.Vector.Storable qualified as V (unsafeFromForeignPtr0)
+import Foreign (Storable (..))
+import Foreign.ForeignPtr (newForeignPtr_)
+import Foreign.Marshal (mallocBytes)
 import LambdaSound.Samples
 import LambdaSound.Sound
 
 -- | Samples a sound with the given frequency (usually 44100 is good) without post-processing
-sampleSoundRaw :: Hz -> Sound T Pulse -> M.Vector M.D Pulse
-sampleSoundRaw hz (TimedSound duration compute) =
+sampleSoundRaw :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
+sampleSoundRaw hz (TimedSound duration msc) = do
   let period = coerce $ 1 / hz
       sr = SampleRate period (round $ coerce duration / period)
-      compute' = compute sr
-   in M.generate M.Seq (M.Sz1 sr.samples) $
-        compute' . coerce
+
+  samplePtr <- mallocBytes (sr.samples * sizeOf (undefined :: Pulse))
+  runMSC sr msc samplePtr
+  fptr <- newForeignPtr_ samplePtr
+  pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr sr.samples
 
 -- | Samples a sound with the given frequency (usually 44100 is good) with post-processing
 --
 -- This is recommended over 'sampleSoundRaw' if you are unsure
-sampleSound :: Hz -> Sound T Pulse -> M.Vector M.S Pulse
+sampleSound :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
 sampleSound hz sound =
-  M.compute $ postProcess $ sampleSoundRaw hz sound
+  M.compute . postProcess <$> sampleSoundRaw hz sound
 
 postProcess :: (M.Source r Pulse) => M.Vector r Pulse -> M.Vector M.D Pulse
 postProcess = compressDynamically
