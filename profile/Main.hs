@@ -4,7 +4,7 @@ import LambdaSound
 
 main :: IO ()
 main = do
-  !floats <- sampleSound 44100 $ repeatSound 5 song
+  !floats <- sampleSound 44100 $ repeatSound 20 song
   pure ()
 
 song :: Sound T Pulse

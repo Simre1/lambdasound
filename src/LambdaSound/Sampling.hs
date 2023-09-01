@@ -6,8 +6,8 @@ import Data.Coerce
 import Data.Massiv.Array qualified as M
 import Data.Vector.Storable qualified as V (unsafeFromForeignPtr0)
 import Foreign (Storable (..))
-import Foreign.ForeignPtr (newForeignPtr_)
-import Foreign.Marshal (mallocBytes)
+import Foreign.ForeignPtr (newForeignPtr)
+import Foreign.Marshal (mallocBytes, finalizerFree)
 import LambdaSound.Samples
 import LambdaSound.Sound
 
@@ -19,7 +19,7 @@ sampleSoundRaw hz (TimedSound duration msc) = do
 
   samplePtr <- mallocBytes (sr.samples * sizeOf (undefined :: Pulse))
   runMSC sr msc samplePtr
-  fptr <- newForeignPtr_ samplePtr
+  fptr <- newForeignPtr finalizerFree samplePtr
   pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr sr.samples
 
 -- | Samples a sound with the given frequency (usually 44100 is good) with post-processing
