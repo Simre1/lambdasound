@@ -1,9 +1,9 @@
 module LambdaSound.Sound.Types where
-import GHC.Generics (Generic)
+
+import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable)
 import Foreign.Storable (Storable)
-import Control.DeepSeq (NFData)
-
+import GHC.Generics (Generic)
 
 -- | Gives information about how many samples are needed during computation
 data SampleRate = SampleRate
@@ -15,14 +15,14 @@ data SampleRate = SampleRate
 instance Hashable SampleRate
 
 -- | An audio sample
-newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
+newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable)
+
 -- | The duration of a 'Sound'
-newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
+newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable)
 
 -- | The progress of a 'Sound'. A sound progresses from '0' to '1'
 -- while it plays.
-newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
+newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable)
 
 -- | The percentage of a 'Sound'. '0.3' corresponds to 30% of a 'Sound'.
-newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
-
+newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable)

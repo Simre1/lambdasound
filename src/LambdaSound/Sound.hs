@@ -41,8 +41,7 @@ module LambdaSound.Sound
     sampleIndex,
     computeOnce,
     constant,
-    silence,
-    runMSC,
+    silence
   )
 where
 
@@ -53,6 +52,7 @@ import Data.Massiv.Array qualified as M
 import LambdaSound.Sound.ComputeSound (ComputeSound)
 import LambdaSound.Sound.MSC
 import LambdaSound.Sound.Types
+import System.IO.Unsafe (unsafePerformIO)
 
 
 -- | Some 'Sound's have a different while others do not.
@@ -81,8 +81,15 @@ mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
 mapComputation f (TimedSound d msc) = TimedSound d $ f msc
 {-# INLINE mapComputation #-}
 
-instance Show (Sound d a) where
-  show _ = "Sound Computation"
+instance Show (Sound d Pulse) where
+  show (TimedSound d c) = showSampledCompute d c
+  show (InfiniteSound c) = showSampledCompute 3 c
+
+showSampledCompute :: Duration -> MSC (ComputeSound Pulse) -> String
+showSampledCompute d msc = unsafePerformIO $ do
+  let sr = SampleRate (1 / 25) (ceiling $ d * 25)
+  floats <- sampleMSC sr msc
+  pure $ show $ M.toList floats
 
 instance Semigroup (Sound d Pulse) where
   -- \| Combines two sounds in a parallel manner (see 'parallel2')
@@ -277,11 +284,6 @@ takeSound takeD' (TimedSound originalD msc) =
     factor = takeD / originalD
 {-# INLINE takeSound #-}
 
--- evaluate :: Sound d Pulse -> Sound d Pulse
--- evaluate = mapComputation $ \msc -> do
---   wm <- asWriteMemory msc
---   pure $ ComputeSound $ \_ chooseWm -> chooseWm wm
-
 -- | Change how the 'Sound' progresses. For example, you can slow it
 -- down in the beginning and speed it up at the end. However, the total
 -- duration stays the same.
@@ -296,17 +298,6 @@ changeTempo f = mapComputation $ modifyIndexCompute id $ \sr oldCompute index ->
           (fromIntegral index / fromIntegral sr.samples)
           * fromIntegral sr.samples
 {-# INLINE changeTempo #-}
-
--- data ComputeSound a where
---   WriteMemory :: (Ptr Pulse -> IO ()) -> ComputeSound Pulse
---   IndexCompute :: (IO (Int -> IO a)) -> ComputeSound a
-
--- to :: ComputeSound a -> ComputeSound2 a
--- to (WriteMemory w) = ComputeSound2 $ \wm ic -> wm w
--- to (IndexCompute ic) = ComputeSound2 $ \wm icc -> icc ic
-
--- from :: ComputeSound2 a -> ComputeSound a
--- from (ComputeSound2 f) = f WriteMemory IndexCompute
 
 -- | A Kernel for convolution
 data Kernel p = Kernel
@@ -332,7 +323,6 @@ convolve (Kernel coefficients sizeP offsetP) = mapComputation $ mapWholeComputat
               coerce @_ @Pulse $
                 coefficients (fromIntegral i / fromIntegral (size - 1))
    in M.mapStencil M.Reflect stencil wholeSound
-{-# INLINE convolve #-}
 
 -- | Convolution of a 'Sound' where the 'Kernel' size is
 -- determined by a 'Duration'.

@@ -4,7 +4,7 @@ import Data.Coerce (coerce)
 import LambdaSound
 
 main :: IO ()
-main = play 44100 0.4 $ song 
+main = play 44100 0.4 $ cache song 
   -- let x = note d4 in x >>> x
 
 song :: Sound T Pulse

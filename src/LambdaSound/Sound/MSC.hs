@@ -14,12 +14,13 @@ import Data.Monoid
 import Data.SomeStableName (makeSomeStableName)
 import Data.Vector.Storable qualified as V (unsafeFromForeignPtr0)
 import Data.Vector.Storable.Mutable qualified as VM (unsafeFromForeignPtr0)
-import Foreign.ForeignPtr (newForeignPtr_)
+import Foreign.ForeignPtr (newForeignPtr_, newForeignPtr)
 import Foreign.Marshal (copyBytes, free, mallocBytes)
 import Foreign.Ptr
 import Foreign.Storable (Storable (..))
 import LambdaSound.Sound.ComputeSound
 import LambdaSound.Sound.Types
+import Foreign.Marshal.Alloc (finalizerFree)
 
 makeIndexCompute :: (SampleRate -> Int -> a) -> MSC (ComputeSound a)
 makeIndexCompute f = do
@@ -176,6 +177,13 @@ runMSC sr msc samplePtr = do
   writeSamples arenaPtr samplePtr
   free arenaPtr
 {-# INLINE runMSC #-}
+
+sampleMSC :: SampleRate -> MSC (ComputeSound Pulse) -> IO (M.Vector M.S Pulse)
+sampleMSC sampleRate msc = do
+  samplePtr <- mallocBytes (sampleRate.samples * sizeOf (undefined :: Pulse))
+  runMSC sampleRate msc samplePtr
+  fptr <- liftIO $ newForeignPtr finalizerFree samplePtr
+  pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr sampleRate.samples
 
 zipWithCompute :: (a -> b -> c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
 zipWithCompute f msc1 msc2 = do

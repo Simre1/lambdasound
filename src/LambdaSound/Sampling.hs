@@ -4,12 +4,9 @@ import Codec.Audio.Wave
 import Data.ByteString.Builder qualified as B
 import Data.Coerce
 import Data.Massiv.Array qualified as M
-import Data.Vector.Storable qualified as V (unsafeFromForeignPtr0)
-import Foreign (Storable (..))
-import Foreign.ForeignPtr (newForeignPtr)
-import Foreign.Marshal (mallocBytes, finalizerFree)
 import LambdaSound.Samples
 import LambdaSound.Sound
+import LambdaSound.Sound.MSC (sampleMSC)
 
 -- | Samples a sound with the given frequency (usually 44100 is good) without post-processing
 sampleSoundRaw :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
@@ -17,10 +14,7 @@ sampleSoundRaw hz (TimedSound duration msc) = do
   let period = coerce $ 1 / hz
       sr = SampleRate period (round $ coerce duration / period)
 
-  samplePtr <- mallocBytes (sr.samples * sizeOf (undefined :: Pulse))
-  runMSC sr msc samplePtr
-  fptr <- newForeignPtr finalizerFree samplePtr
-  pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr sr.samples
+  sampleMSC sr msc
 
 -- | Samples a sound with the given frequency (usually 44100 is good) with post-processing
 --

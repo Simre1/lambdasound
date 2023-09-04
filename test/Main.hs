@@ -21,7 +21,8 @@ main =
         testProperty "distributivity of parallel and sequence" distributivityParallelSequence,
         testProperty "takeSound" takeSoundProperty,
         testProperty "dropSound" dropSoundProperty,
-        testProperty "take/drop" dropTakeSoundDuality
+        testProperty "take/drop" dropTakeSoundDuality,
+        testProperty "cache does not change sound" cacheDoesNotChangeSound 
       ]
 
 genSound :: Gen (Sound T Pulse)
@@ -95,6 +96,13 @@ dropTakeSoundDuality = do
   assertEquality "drop/take duality failed" $
     dropSound 1 (sound1 >>> sound2)
       `eqSound` reverseSound (takeSound 1 (reverseSound $ sound1 >>> sound2))
+
+cacheDoesNotChangeSound :: Property ()
+cacheDoesNotChangeSound= do
+  sound <- setDuration 1 <$> gen genSound
+  assertEquality "cache changed sound" $
+    cache sound
+      `eqSound` sound
 
 assertEquality :: String -> IO Bool -> Property ()
 assertEquality failText check = do
