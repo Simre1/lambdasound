@@ -36,7 +36,6 @@ library
         typed-process,
         bytestring,
         vector,
-        -- ghc >= 9.4.4,
         directory,
         filepath,
         binary,
@@ -47,7 +46,10 @@ library
         massiv,
         bytestring-to-vector,
         deepseq,
-        transformers
+        transformers,
+        unordered-containers,
+        hashable,
+        hashtables
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,

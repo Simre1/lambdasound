@@ -50,4 +50,4 @@ convolutionSound =
     (1 |-> simplePulse)
 
 longSound :: Sound T Pulse
-longSound = repeatSound 5 someSounds
+longSound = repeatSound 20 someSounds
