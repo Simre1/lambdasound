@@ -1,13 +1,14 @@
 module Main (main) where
 
 import Control.Monad (join, unless)
+import Control.Monad.IO.Class (liftIO)
 import Data.List.NonEmpty
+import Data.Massiv.Array qualified as M
 import LambdaSound
 import Test.Falsify.Generator qualified as Gen
 import Test.Tasty
 import Test.Tasty.Falsify
-import  Data.Massiv.Array qualified as M
-import GHC.Stack (HasCallStack)
+import System.IO.Unsafe (unsafePerformIO)
 
 main :: IO ()
 main =
@@ -20,7 +21,8 @@ main =
         testProperty "distributivity of parallel and sequence" distributivityParallelSequence,
         testProperty "takeSound" takeSoundProperty,
         testProperty "dropSound" dropSoundProperty,
-        testProperty "take/drop" dropTakeSoundDuality
+        testProperty "take/drop" dropTakeSoundDuality,
+        testProperty "cache does not change sound" cacheDoesNotChangeSound 
       ]
 
 genSound :: Gen (Sound T Pulse)
@@ -47,26 +49,23 @@ genSound = do
 reverseProperty :: Property ()
 reverseProperty = do
   sound <- genWith (\_ -> Just "Sound") genSound
-  if reverseSound (reverseSound sound)
-    `eqSound` sound
-    then pure ()
-    else testFailed "reverseSound failing"
+  assertEquality "reverseSound failing" $
+    reverseSound (reverseSound sound)
+      `eqSound` sound
 
 associativeSequence :: Property ()
 associativeSequence = do
   sound1 <- gen genSound
   sound2 <- gen genSound
   sound3 <- gen genSound
-  unless ((sound1 >>> (sound2 >>> sound3)) `eqSound` ((sound1 >>> sound2) >>> sound3)) $
-    testFailed "sequence not associative"
+  assertEquality "sequence not associative" $ (sound1 >>> (sound2 >>> sound3)) `eqSound` ((sound1 >>> sound2) >>> sound3)
 
 associativeParallel :: Property ()
 associativeParallel = do
   sound1 <- gen genSound
   sound2 <- gen genSound
   sound3 <- gen genSound
-  unless ((sound1 <> (sound2 <> sound3)) `almostEqSound` ((sound1 <> sound2) <> sound3)) $
-    testFailed "parallel not associative"
+  assertEquality "parallel not associative" $ (sound1 <> (sound2 <> sound3)) `almostEqSound` ((sound1 <> sound2) <> sound3)
 
 distributivityParallelSequence :: Property ()
 distributivityParallelSequence = do
@@ -74,43 +73,49 @@ distributivityParallelSequence = do
   sound2 <- setDuration 1 <$> gen genSound
   sound3 <- setDuration 1 <$> gen genSound
   sound4 <- setDuration 1 <$> gen genSound
-  unless
-    ( ((sound1 >>> sound2) <> (sound3 >>> sound4))
-        `almostEqSound` ((sound1 <> sound3) >>> (sound2 <> sound4))
-    )
-    $ testFailed "parallel not associative"
+  assertEquality "parallel not associative" $
+    ((sound1 >>> sound2) <> (sound3 >>> sound4))
+      `almostEqSound` ((sound1 <> sound3) >>> (sound2 <> sound4))
 
 takeSoundProperty :: Property ()
 takeSoundProperty = do
   sound1 <- setDuration 1 <$> gen genSound
   sound2 <- setDuration 1 <$> gen genSound
-  unless (takeSound 1 (sound1 >>> sound2) `eqSound` sound1) $
-    testFailed "takeSound failed"
+  assertEquality "takeSound failed" $ takeSound 1 (sound1 >>> sound2) `eqSound` sound1
 
 dropSoundProperty :: Property ()
 dropSoundProperty = do
   sound1 <- setDuration 1 <$> gen genSound
   sound2 <- setDuration 1 <$> gen genSound
-  unless (dropSound 1 (sound1 >>> sound2) `eqSound` sound2) $
-    testFailed "dropSound failed"
-    
+  assertEquality "dropSound failed" $ dropSound 1 (sound1 >>> sound2) `eqSound` sound2
+
 dropTakeSoundDuality :: Property ()
 dropTakeSoundDuality = do
   sound1 <- setDuration 1 <$> gen genSound
   sound2 <- setDuration 1 <$> gen genSound
-  unless
-    ( dropSound 1 (sound1 >>> sound2)
-        `eqSound` reverseSound (takeSound 1 (reverseSound $ sound1 >>> sound2))
-    )
-    $ testFailed "drop/take duality failed"
+  assertEquality "drop/take duality failed" $
+    dropSound 1 (sound1 >>> sound2)
+      `eqSound` reverseSound (takeSound 1 (reverseSound $ sound1 >>> sound2))
 
-eqSound :: Sound T Pulse -> Sound T Pulse -> Bool
-eqSound s1 s2 = sampleSound (Hz 100) s1 == sampleSound (Hz 100) s2
+cacheDoesNotChangeSound :: Property ()
+cacheDoesNotChangeSound= do
+  sound <- setDuration 1 <$> gen genSound
+  assertEquality "cache changed sound" $
+    cache sound
+      `eqSound` sound
 
-almostEqSound :: Sound T Pulse -> Sound T Pulse -> Bool
-almostEqSound s1 s2 =
-  let x = sampleSound (Hz 100) s1
-      y = sampleSound (Hz 100) s2
-   in M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
+assertEquality :: String -> IO Bool -> Property ()
+assertEquality failText check = do
+  let areEqual = unsafePerformIO $ liftIO check
+  unless areEqual (testFailed failText)
+
+eqSound :: Sound T Pulse -> Sound T Pulse -> IO Bool
+eqSound s1 s2 = (==) <$> sampleSound (Hz 100) s1 <*> sampleSound (Hz 100) s2
+
+almostEqSound :: Sound T Pulse -> Sound T Pulse -> IO Bool
+almostEqSound s1 s2 = do
+  x <- sampleSound (Hz 100) s1
+  y <- sampleSound (Hz 100) s2
+  pure $ M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
   where
     epsilon = 5e-6

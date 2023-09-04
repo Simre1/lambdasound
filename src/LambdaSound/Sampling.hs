@@ -6,22 +6,22 @@ import Data.Coerce
 import Data.Massiv.Array qualified as M
 import LambdaSound.Samples
 import LambdaSound.Sound
+import LambdaSound.Sound.MSC (sampleMSC)
 
 -- | Samples a sound with the given frequency (usually 44100 is good) without post-processing
-sampleSoundRaw :: Hz -> Sound T Pulse -> M.Vector M.D Pulse
-sampleSoundRaw hz (TimedSound duration compute) =
+sampleSoundRaw :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
+sampleSoundRaw hz (TimedSound duration msc) = do
   let period = coerce $ 1 / hz
       sr = SampleRate period (round $ coerce duration / period)
-      compute' = compute sr
-   in M.generate M.Seq (M.Sz1 sr.samples) $
-        compute' . coerce
+
+  sampleMSC sr msc
 
 -- | Samples a sound with the given frequency (usually 44100 is good) with post-processing
 --
 -- This is recommended over 'sampleSoundRaw' if you are unsure
-sampleSound :: Hz -> Sound T Pulse -> M.Vector M.S Pulse
+sampleSound :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
 sampleSound hz sound =
-  M.compute $ postProcess $ sampleSoundRaw hz sound
+  M.compute . postProcess <$> sampleSoundRaw hz sound
 
 postProcess :: (M.Source r Pulse) => M.Vector r Pulse -> M.Vector M.D Pulse
 postProcess = compressDynamically

@@ -13,8 +13,8 @@ import Sound.ProteaAudio.SDL qualified as PA
 -- You need to have SDL2 installed for playing!
 play :: Int -> Float -> Sound T Pulse -> IO ()
 play sampleRate volume sound = do
-  playSamples sampleRate volume $
-    sampleSound (realToFrac sampleRate) sound
+  samples <- sampleSound (realToFrac sampleRate) sound
+  playSamples sampleRate volume samples
 
 playSamples :: Int -> Float -> M.Vector M.S Pulse -> IO ()
 playSamples sampleRate volume samples = do

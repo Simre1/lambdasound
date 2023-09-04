@@ -1,58 +1,59 @@
 module LambdaSound.Cache (cache) where
 
 import Codec.Compression.GZip (compress, decompress)
-import Data.Binary (decode, encode)
+import Control.Monad.IO.Class (MonadIO (..))
 import Data.ByteString.Lazy qualified as BL
-import Data.Coerce (coerce)
-import Data.IORef (newIORef, readIORef, writeIORef)
-import Data.Vector qualified as V
+import Data.Massiv.Array qualified as M
+import Data.Vector.Storable qualified as V
+import Data.Vector.Storable.ByteString (byteStringToVector, vectorToByteString)
 import Data.Word
-import GHC.IO (unsafePerformIO)
 import LambdaSound.Sound
+import LambdaSound.Sound.ComputeSound
+import LambdaSound.Sound.MSC
 import System.Directory
 import System.FilePath (joinPath)
+import Data.ByteString (fromStrict, toStrict)
+import Data.Hashable (hash)
 
 -- | Caches a sound. If the sound is cached, then
 -- the sound gets read from the XDG data directory and does not have to
--- be computed again. 
+-- be computed again.
 -- It might load a cached sound which is not the same
 -- as the computed one, but this should be very unlikely
 cache :: Sound d Pulse -> Sound d Pulse
-cache = unsafePerformIO . cacheIO
+cache (TimedSound d msc) = TimedSound d $ cacheComputation msc
+cache (InfiniteSound msc) = InfiniteSound $ cacheComputation msc
 
-cacheIO :: Sound d Pulse -> IO (Sound d Pulse)
-cacheIO (TimedSound d c) = TimedSound d <$> cacheComputation c
-cacheIO (InfiniteSound c) = InfiniteSound <$> cacheComputation c
-
-cacheComputation :: (SampleRate -> CurrentSample -> Pulse) -> IO (SampleRate -> CurrentSample -> Pulse)
-cacheComputation c = do
-  let key :: Word64 = cacheKey c
-  cacheDir <- getXdgDirectory XdgCache "lambdasound"
+cacheComputation :: MSC (ComputeSound Pulse) -> MSC (ComputeSound Pulse)
+cacheComputation msc = do
+  key <- liftIO $ computeCacheKey msc
+  cacheDir <- liftIO $ getXdgDirectory XdgCache "lambdasound"
   let directoryPath = joinPath [cacheDir, show key]
-  createDirectoryIfMissing True directoryPath
+  liftIO $ createDirectoryIfMissing True directoryPath
 
-  fileContent <- newIORef Nothing
-  pure $ \sr cs -> unsafePerformIO $ do
-    let filePath = joinPath [directoryPath, show $ sr.samples]
+  sr <- getSR
+  let filePath = joinPath [directoryPath, show $ sr.samples]
 
-    maybeFloats <- readIORef fileContent
-    case maybeFloats of
-      Just floats -> pure $ Pulse $ floats V.! cs.index
-      Nothing -> do
-        exists <- doesFileExist filePath
-        if exists
-          then do
-            file <- BL.readFile filePath
-            let floats = V.fromList $ decode $ decompress file
-            writeIORef fileContent $ Just floats
-            pure $ Pulse $ floats V.! cs.index
-          else
-            let pulses = V.generate sr.samples $ c sr . coerce
-             in do
-                  BL.writeFile filePath $ compress $ encode @[Float] $ coerce $ V.toList pulses
-                  pure $ pulses V.! cs.index
+  exists <- liftIO $ doesFileExist filePath
+  if exists -- exists
+    then do
+      file <- liftIO $ BL.readFile filePath
+      let floats = byteStringToVector $ toStrict $ decompress file
+      makeIndexCompute @Pulse (\_ index -> floats V.! index)
+    else do
+      (wm, ci) <- asWriteMemory msc
+      pure $
+        ComputeSound
+          ( \_ chooseWm -> chooseWm $ \basePtr ptr -> do
+              wm basePtr ptr
+              floats <- vectorFromPtr ptr sr.samples
+              let bytes = compress $ fromStrict $ vectorToByteString $ M.toStorableVector floats
+              BL.writeFile filePath bytes
+          )
+          ci
 
-cacheKey :: (SampleRate -> CurrentSample -> Pulse) -> Word64
-cacheKey c =
+computeCacheKey :: MSC (ComputeSound Pulse) -> IO Word64
+computeCacheKey msc = do
   let sr = SampleRate 1 50
-   in sum $ round . (* 1000) . c sr . CurrentSample <$> [0 .. 49]
+  floats <- sampleMSC sr msc
+  pure $ fromIntegral $ hash $ M.toList $ M.map (* 1000) floats

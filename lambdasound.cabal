@@ -27,7 +27,11 @@ library
         LambdaSound.Note,
         LambdaSound.Cache,
         LambdaSound.Sampling
-    -- other-modules:
+    other-modules:
+        LambdaSound.Sound.MSC,
+        LambdaSound.Sound.ComputeSound,
+        LambdaSound.Sound.Types,
+        Data.SomeStableName
     -- other-extensions:
     build-depends:    
         base ^>=4.17.0.0,
@@ -35,7 +39,6 @@ library
         typed-process,
         bytestring,
         vector,
-        -- ghc >= 9.4.4,
         directory,
         filepath,
         binary,
@@ -45,7 +48,11 @@ library
         proteaaudio-sdl,
         massiv,
         bytestring-to-vector,
-        deepseq
+        deepseq,
+        transformers,
+        unordered-containers,
+        hashable,
+        hashtables
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,

@@ -3,9 +3,9 @@ module Main where
 import LambdaSound
 
 main :: IO ()
-main =
-  let !floats = sampleSound 44100 $ repeatSound 5 song
-   in pure ()
+main = do
+  !floats <- sampleSound 44100 $ repeatSound 20 song
+  pure ()
 
 song :: Sound T Pulse
 song = melody <> reduce 1.5 background
