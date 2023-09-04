@@ -79,7 +79,6 @@ data Sound (d :: SoundDuration) a where
 mapComputation :: (MSC (ComputeSound a) -> MSC (ComputeSound b)) -> Sound d a -> Sound d b
 mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
 mapComputation f (TimedSound d msc) = TimedSound d $ f msc
-{-# INLINE mapComputation #-}
 
 instance Show (Sound d Pulse) where
   show (TimedSound d c) = showSampledCompute d c
@@ -94,15 +93,12 @@ showSampledCompute d msc = unsafePerformIO $ do
 instance Semigroup (Sound d Pulse) where
   -- \| Combines two sounds in a parallel manner (see 'parallel2')
   (<>) = parallel2
-  {-# INLINE (<>) #-}
 
 instance Monoid (Sound I Pulse) where
   mempty = silence
-  {-# INLINE mempty #-}
 
 instance Monoid (Sound T Pulse) where
   mempty = TimedSound 0 $ makeIndexCompute (\_ _ -> 0)
-  {-# INLINE mempty #-}
 
 instance (Num a) => Num (Sound I a) where
   (+) = zipSoundWith (+)
@@ -112,40 +108,28 @@ instance (Num a) => Num (Sound I a) where
   fromInteger x = constant $ fromInteger x
   signum = fmap signum
   negate = fmap negate
-  {-# INLINE (+) #-}
-  {-# INLINE (-) #-}
-  {-# INLINE (*) #-}
-  {-# INLINE abs #-}
-  {-# INLINE fromInteger #-}
-  {-# INLINE signum #-}
-  {-# INLINE negate #-}
 
 instance Functor (Sound d) where
   fmap f = mapComputation $ mapComputeSound f
-  {-# INLINE fmap #-}
 
 -- | Append two sounds. This is only possible for sounds with a duration.
 sequentially2 :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
 sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) =
   TimedSound (d1 + d2) $
     computeSequentially (coerce $ d1 / (d1 + d2)) c1 c2
-{-# INLINE sequentially2 #-}
 
 -- | Same as 'sequentially2'
 (>>>) :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
 (>>>) = sequentially2
-{-# INLINE (>>>) #-}
 
 -- | Combine a list of sounds in a sequential manner.
 sequentially :: [Sound T Pulse] -> Sound T Pulse
 sequentially = foldl' sequentially2 mempty
-{-# INLINE sequentially #-}
 
 -- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
 time :: Sound I Float
 time = InfiniteSound $ makeIndexCompute $ \sr index ->
   fromIntegral index * sr.period
-{-# INLINE time #-}
 
 -- | Get the 'Progress' of a 'Sound'.
 -- 'Progress' of '0' means that the sound has just started
@@ -154,12 +138,10 @@ time = InfiniteSound $ makeIndexCompute $ \sr index ->
 progress :: Sound I Progress
 progress = InfiniteSound $ makeIndexCompute $ \sr index ->
   fromIntegral index / fromIntegral sr.samples
-{-# INLINE progress #-}
 
 -- | Tells you the sample index for each sample
 sampleIndex :: Sound I Int
 sampleIndex = InfiniteSound $ makeIndexCompute $ \_ index -> index
-{-# INLINE sampleIndex #-}
 
 -- | Combine two sounds such that they play in parallel
 parallel2 :: Sound d Pulse -> Sound d Pulse -> Sound d Pulse
@@ -171,22 +153,18 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ compu
         then (c1, d2 / newDuration, c2)
         else (c2, d1 / newDuration, c1)
     newDuration = max d1 d2
-{-# INLINE parallel2 #-}
 
 -- | Combine a lists of sounds such that they play in parallel
 parallel :: (Monoid (Sound d Pulse)) => [Sound d Pulse] -> Sound d Pulse
 parallel = foldl' parallel2 mempty
-{-# INLINE parallel #-}
 
 -- | A 'Sound' with '0' volume
 silence :: Sound I Pulse
 silence = constant 0
-{-# INLINE silence #-}
 
 -- | A constant 'Sound'
 constant :: a -> Sound I a
 constant a = InfiniteSound $ makeIndexCompute $ \_ _ -> a
-{-# INLINE constant #-}
 
 -- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
 -- to the duration of the shorter 'Sound', cutting away the excess samples from the longer one.
@@ -200,17 +178,14 @@ zipSoundWith f sound1 sound2 =
     (TimedSound d c1, InfiniteSound c2) -> TimedSound d $ zipWithCompute f c1 c2
     (InfiniteSound c1, TimedSound d c2) -> TimedSound d $ zipWithCompute f c1 c2
     (InfiniteSound c1, InfiniteSound c2) -> InfiniteSound $ zipWithCompute f c1 c2
-{-# INLINE zipSoundWith #-}
 
 -- | Amplifies the volume of the given 'Sound'
 amplify :: Float -> Sound d Pulse -> Sound d Pulse
 amplify x = fmap (* coerce x)
-{-# INLINE amplify #-}
 
 -- | Reduces the volume of the given 'Sound'
 reduce :: Float -> Sound d Pulse -> Sound d Pulse
 reduce x = amplify (1 / x)
-{-# INLINE reduce #-}
 
 -- | Raises the frequency of the 'Sound' by the given factor.
 -- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
@@ -218,13 +193,11 @@ raise :: Float -> Sound d Pulse -> Sound d Pulse
 raise x = mapComputation $ \msc -> do
   sr <- getSR
   withSR (sr {period = coerce x * sr.period}) msc
-{-# INLINE raise #-}
 
 -- | Diminishes the frequency of the 'Sound' by the given factor
 -- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
 diminish :: Float -> Sound d Pulse -> Sound d Pulse
 diminish x = raise $ 1 / x
-{-# INLINE diminish #-}
 
 -- | Sets the duration of the 'Sound', scaling it
 -- such that the previous sound fits within the resulting one.
@@ -232,30 +205,25 @@ diminish x = raise $ 1 / x
 setDuration :: Duration -> Sound d a -> Sound T a
 setDuration d (TimedSound _ c) = TimedSound d c
 setDuration d (InfiniteSound c) = TimedSound d c
-{-# INLINE setDuration #-}
 
 -- | Same as `setDuration` but in operator form
 (|->) :: Duration -> Sound d a -> Sound 'T a
 (|->) = setDuration
-{-# INLINE (|->) #-}
 
 -- | Scales the 'Duration' of a 'Sound'.
 -- The following makes a sound twice as long:
 -- > scaleDuration 2 sound
 scaleDuration :: Float -> Sound T a -> Sound T a
 scaleDuration x (TimedSound d c) = TimedSound (coerce x * d) c
-{-# INLINE scaleDuration #-}
 
 -- | Get the duration of a 'T'imed 'Sound'
 getDuration :: Sound T a -> Duration
 getDuration (TimedSound d _) = d
-{-# INLINE getDuration #-}
 
 -- | Reverses a 'Sound' similar to 'reverse' for lists
 reverseSound :: Sound d a -> Sound d a
 reverseSound = mapComputation $ modifyIndexCompute id $ \sr oldCompute index ->
   oldCompute (pred sr.samples - index)
-{-# INLINE reverseSound #-}
 
 -- | Drop parts of a sound similar to 'drop' for lists
 dropSound :: Duration -> Sound T a -> Sound T a
@@ -269,7 +237,6 @@ dropSound dropD' (TimedSound originalD msc) = TimedSound (originalD - dropD) $ d
     droppedFactor = dropD / originalD
     factor = 1 - droppedFactor
     paddedSamples sr = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
-{-# INLINE dropSound #-}
 
 -- | Take parts of a sound similar to 'take' for lists
 takeSound :: Duration -> Sound T a -> Sound T a
@@ -282,7 +249,6 @@ takeSound takeD' (TimedSound originalD msc) =
   where
     takeD = max 0 $ min takeD' originalD
     factor = takeD / originalD
-{-# INLINE takeSound #-}
 
 -- | Change how the 'Sound' progresses. For example, you can slow it
 -- down in the beginning and speed it up at the end. However, the total
@@ -297,7 +263,6 @@ changeTempo f = mapComputation $ modifyIndexCompute id $ \sr oldCompute index ->
         f
           (fromIntegral index / fromIntegral sr.samples)
           * fromIntegral sr.samples
-{-# INLINE changeTempo #-}
 
 -- | A Kernel for convolution
 data Kernel p = Kernel
@@ -331,14 +296,12 @@ convolveDuration (Kernel coefficients sizeD offsetD) sound@(TimedSound d _) =
   convolve
     (Kernel coefficients (coerce $ sizeD / d) (coerce $ offsetD / d))
     sound
-{-# INLINE convolveDuration #-}
 
 -- | Compute a value once and then reuse it while computing all samples
 computeOnce :: (SampleRate -> a) -> Sound d (a -> b) -> Sound d b
 computeOnce f = mapComputation $ modifyIndexCompute id $ \sr ->
   let a = f sr
    in \oldCompute index -> ($ a) <$> oldCompute index
-{-# INLINE computeOnce #-}
 
 -- | Modify all samples of a sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
