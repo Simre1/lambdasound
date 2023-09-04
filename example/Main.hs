@@ -4,8 +4,8 @@ import Data.Coerce (coerce)
 import LambdaSound
 
 main :: IO ()
-main = play 44100 0.4 $ 
-  let x = note d4 in x >>> x
+main = play 44100 0.4 $ song 
+  -- let x = note d4 in x >>> x
 
 song :: Sound T Pulse
 song = melody <> reduce 1.5 background

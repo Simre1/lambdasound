@@ -21,14 +21,17 @@ library
     exposed-modules:  
         LambdaSound,
         LambdaSound.Sound,
-        LambdaSound.Sound2,
         LambdaSound.Samples,
         LambdaSound.Effect,
         LambdaSound.Play,
         LambdaSound.Note,
         LambdaSound.Cache,
         LambdaSound.Sampling
-    -- other-modules:
+    other-modules:
+        LambdaSound.Sound.MSC,
+        LambdaSound.Sound.ComputeSound,
+        LambdaSound.Sound.Types,
+        Data.SomeStableName
     -- other-extensions:
     build-depends:    
         base ^>=4.17.0.0,

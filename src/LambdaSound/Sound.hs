@@ -7,7 +7,6 @@ module LambdaSound.Sound
     Progress (..),
     Percentage (..),
     SampleRate (..),
-    CurrentSample (..),
     DetermineDuration,
 
     -- ** Combinators
@@ -34,6 +33,7 @@ module LambdaSound.Sound
     Kernel (..),
     convolve,
     convolveDuration,
+    modifyWholeSound,
 
     -- ** Making new sounds
     time,
@@ -43,61 +43,17 @@ module LambdaSound.Sound
     constant,
     silence,
     runMSC,
-    evaluate,
   )
 where
 
-import Control.DeepSeq (NFData)
-import Control.Monad (forM_, when)
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.State.Lazy
-import Control.Monad.Trans.Writer.Lazy
 import Data.Coerce (coerce)
 import Data.Foldable (foldl')
 import Data.Functor ((<&>))
-import Data.HashTable.IO qualified as H
-import Data.Hashable (Hashable (..))
 import Data.Massiv.Array qualified as M
-import Data.Maybe (fromJust)
-import Data.Monoid (Sum (..))
-import Data.Vector.Storable qualified as V
-import Data.Vector.Storable.Mutable qualified as VM
-import Foreign (copyBytes)
-import Foreign.ForeignPtr (newForeignPtr_)
-import Foreign.Marshal (free, mallocBytes)
-import Foreign.Ptr
-import Foreign.Storable
-import GHC.Generics (Generic)
-import GHC.StableName
-import Unsafe.Coerce (unsafeCoerce)
+import LambdaSound.Sound.ComputeSound (ComputeSound)
+import LambdaSound.Sound.MSC
+import LambdaSound.Sound.Types
 
--- | An audio sample
-newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
-
--- | The duration of a 'Sound'
-newtype Duration = Duration Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
-
--- | The progress of a 'Sound'. A sound progresses from '0' to '1'
--- while it plays.
-newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
-
--- | The percentage of a 'Sound'. '0.3' corresponds to 30% of a 'Sound'.
-newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable)
-
--- | Gives information about how many samples are needed during computation
-data SampleRate = SampleRate
-  { period :: !Float,
-    samples :: !Int
-  }
-  deriving (Show)
-
--- | Contains the index of the sample currently being computed
-newtype CurrentSample = CurrentSample
-  { index :: Int
-  }
-  deriving (Show)
 
 -- | Some 'Sound's have a different while others do not.
 -- 'I'nfinite 'Sound's have no duration
@@ -120,6 +76,11 @@ data Sound (d :: SoundDuration) a where
     MSC (ComputeSound a) ->
     Sound I a
 
+mapComputation :: (MSC (ComputeSound a) -> MSC (ComputeSound b)) -> Sound d a -> Sound d b
+mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
+mapComputation f (TimedSound d msc) = TimedSound d $ f msc
+{-# INLINE mapComputation #-}
+
 instance Show (Sound d a) where
   show _ = "Sound Computation"
 
@@ -133,7 +94,7 @@ instance Monoid (Sound I Pulse) where
   {-# INLINE mempty #-}
 
 instance Monoid (Sound T Pulse) where
-  mempty = TimedSound 0 $ pure $ ComputeSound $ \chooseIc _ -> chooseIc $ const $ pure (const $ pure 0)
+  mempty = TimedSound 0 $ makeIndexCompute (\_ _ -> 0)
   {-# INLINE mempty #-}
 
 instance (Num a) => Num (Sound I a) where
@@ -158,16 +119,9 @@ instance Functor (Sound d) where
 
 -- | Append two sounds. This is only possible for sounds with a duration.
 sequentially2 :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
-sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound (d1 + d2) $ do
-  sr <- getSR
-  let factor = d1 / (d1 + d2)
-      splitIndex =
-        round $
-          factor * fromIntegral sr.samples
-  w1 <- withSR (sr {samples = splitIndex}) $ asWriteMemory c1
-  w2 <- withSR (sr {samples = sr.samples - splitIndex}) $ asWriteMemory c2
-  pure $ ComputeSound $ \_ chooseWm -> chooseWm $ \basePtr ptr ->
-    w1 basePtr ptr >> w2 basePtr (ptr `plusPtr` (splitIndex * pulseSize))
+sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) =
+  TimedSound (d1 + d2) $
+    computeSequentially (coerce $ d1 / (d1 + d2)) c1 c2
 {-# INLINE sequentially2 #-}
 
 -- | Same as 'sequentially2'
@@ -182,10 +136,8 @@ sequentially = foldl' sequentially2 mempty
 
 -- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
 time :: Sound I Float
-time = InfiniteSound $ do
-  sr <- getSR
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ const $ pure $ \index ->
-    pure $ fromIntegral index * sr.period
+time = InfiniteSound $ makeIndexCompute $ \sr index ->
+  fromIntegral index * sr.period
 {-# INLINE time #-}
 
 -- | Get the 'Progress' of a 'Sound'.
@@ -193,35 +145,24 @@ time = InfiniteSound $ do
 -- 'Progress' of '1' means that the sound has finished
 -- 'Progress' greater than '1' or smaller than '0' is invalid
 progress :: Sound I Progress
-progress = InfiniteSound $ do
-  sr <- getSR
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ const $ pure $ \index ->
-    pure $ fromIntegral index / fromIntegral sr.samples
+progress = InfiniteSound $ makeIndexCompute $ \sr index ->
+  fromIntegral index / fromIntegral sr.samples
 {-# INLINE progress #-}
 
 -- | Tells you the sample index for each sample
 sampleIndex :: Sound I Int
-sampleIndex = InfiniteSound $ pure $ ComputeSound $ \chooseIc _ -> chooseIc $ const $ pure pure
+sampleIndex = InfiniteSound $ makeIndexCompute $ \_ index -> index
 {-# INLINE sampleIndex #-}
 
 -- | Combine two sounds such that they play in parallel
 parallel2 :: Sound d Pulse -> Sound d Pulse -> Sound d Pulse
 parallel2 (InfiniteSound c1) (InfiniteSound c2) = InfiniteSound $ zipWithCompute (+) c1 c2
-parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ do
-  sr <- getSR
-  let d1N = round $ d1Percentage * fromIntegral sr.samples
-      d2N = round $ d2Percentage * fromIntegral sr.samples
-  ic1 <- withSR (sr {samples = d1N}) $ asIndexCompute c1
-  ic2 <- withSR (sr {samples = d2N}) $ asIndexCompute c2
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ \basePtr -> do
-    ic1' <- ic1 basePtr
-    ic2' <- ic2 basePtr
-    if d1 >= d2
-      then pure $ \index -> (+) <$> ic1' index <*> if index < d2N then ic2' index else pure 0
-      else pure $ \index -> (+) <$> ic2' index <*> if index < d1N then ic1' index else pure 0
+parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ computeParallel longerC (coerce factor) shorterC
   where
-    d1Percentage = d1 / newDuration
-    d2Percentage = d2 / newDuration
+    (longerC, factor, shorterC) =
+      if d1 >= d2
+        then (c1, d2 / newDuration, c2)
+        else (c2, d1 / newDuration, c1)
     newDuration = max d1 d2
 {-# INLINE parallel2 #-}
 
@@ -237,7 +178,7 @@ silence = constant 0
 
 -- | A constant 'Sound'
 constant :: a -> Sound I a
-constant a = InfiniteSound $ pure $ ComputeSound $ \chooseIc _ -> chooseIc $ const $ pure $ const $ pure a
+constant a = InfiniteSound $ makeIndexCompute $ \_ _ -> a
 {-# INLINE constant #-}
 
 -- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
@@ -305,18 +246,17 @@ getDuration (TimedSound d _) = d
 
 -- | Reverses a 'Sound' similar to 'reverse' for lists
 reverseSound :: Sound d a -> Sound d a
-reverseSound = mapComputation $ \msc -> do
-  sr <- getSR
-  ic <- asIndexCompute msc
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ fmap (\ic' -> ic' . (pred sr.samples -)) . ic
+reverseSound = mapComputation $ modifyIndexCompute id $ \sr oldCompute index ->
+  oldCompute (pred sr.samples - index)
 {-# INLINE reverseSound #-}
 
 -- | Drop parts of a sound similar to 'drop' for lists
 dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD msc) = TimedSound (originalD - dropD) $ do
-  sr <- getSR
-  ic <- withSR (sr {samples = paddedSamples sr}) $ asIndexCompute msc
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ fmap (\f i -> f (i + paddedSamples sr - sr.samples)) . ic
+  modifyIndexCompute
+    (\sr -> sr {samples = paddedSamples sr})
+    (\sr f i -> f (i + paddedSamples sr - sr.samples))
+    msc
   where
     dropD = max 0 $ min originalD dropD'
     droppedFactor = dropD / originalD
@@ -326,19 +266,21 @@ dropSound dropD' (TimedSound originalD msc) = TimedSound (originalD - dropD) $ d
 
 -- | Take parts of a sound similar to 'take' for lists
 takeSound :: Duration -> Sound T a -> Sound T a
-takeSound takeD' (TimedSound originalD msc) = TimedSound takeD $ do
-  sr <- getSR
-  ic <- withSR (sr {samples = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)}) $ asIndexCompute msc
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc ic
+takeSound takeD' (TimedSound originalD msc) =
+  TimedSound takeD $
+    modifyIndexCompute
+      (\sr -> sr {samples = round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)})
+      (\_ f -> f)
+      msc
   where
     takeD = max 0 $ min takeD' originalD
     factor = takeD / originalD
 {-# INLINE takeSound #-}
 
-evaluate :: Sound d Pulse -> Sound d Pulse
-evaluate = mapComputation $ \msc -> do
-  wm <- asWriteMemory msc
-  pure $ ComputeSound $ \_ chooseWm -> chooseWm wm
+-- evaluate :: Sound d Pulse -> Sound d Pulse
+-- evaluate = mapComputation $ \msc -> do
+--   wm <- asWriteMemory msc
+--   pure $ ComputeSound $ \_ chooseWm -> chooseWm wm
 
 -- | Change how the 'Sound' progresses. For example, you can slow it
 -- down in the beginning and speed it up at the end. However, the total
@@ -346,112 +288,14 @@ evaluate = mapComputation $ \msc -> do
 --
 -- Negative 'Progress' is treated as '0' and 'Progress' above '1' is treated as '1'
 changeTempo :: (Progress -> Progress) -> Sound d a -> Sound d a
-changeTempo f = mapComputation $ \msc -> do
-  sr <- getSR
-  ic <- asIndexCompute msc
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ fmap (\ic' -> ic' . changeIndex sr) . ic
-  where
-    changeIndex sr index =
-      min sr.samples $
-        round $
-          f
-            (fromIntegral index / fromIntegral sr.samples)
-            * fromIntegral sr.samples
+changeTempo f = mapComputation $ modifyIndexCompute id $ \sr oldCompute index ->
+  oldCompute $
+    min sr.samples $
+      round $
+        f
+          (fromIntegral index / fromIntegral sr.samples)
+          * fromIntegral sr.samples
 {-# INLINE changeTempo #-}
-
-mapComputation :: (MSC (ComputeSound a) -> MSC (ComputeSound b)) -> Sound d a -> Sound d b
-mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
-mapComputation f (TimedSound d msc) = TimedSound d $ f msc
-{-# INLINE mapComputation #-}
-
-getSR :: MSC SampleRate
-getSR = MSC ask
-{-# INLINE getSR #-}
-
-withSR :: SampleRate -> MSC a -> MSC a
-withSR sr (MSC r) = MSC $ local (const sr) r
-{-# INLINE withSR #-}
-
-arenaAllocate :: MSC (Ptr Pulse -> Ptr Pulse)
-arenaAllocate = do
-  sr <- MSC ask
-  MSC $ lift $ tell $ Sum sr.samples
-  (offset, memoTable) <- MSC $ lift $ lift get
-  MSC $ lift $ lift $ put (offset + sr.samples, memoTable)
-  pure (`plusPtr` (offset * pulseSize))
-{-# INLINE arenaAllocate #-}
-
-lookupMemoizedComputeSound :: (Ptr Pulse -> IO (Int -> IO a)) -> MSC (Maybe (IO (Ptr Pulse)))
-lookupMemoizedComputeSound cs = do
-  key <- liftIO $ HashKey <$> unsafeCoerce (makeStableName cs)
-  (_, MemoComputeSound memoTable) <- MSC $ lift $ lift get
-  res <- liftIO $ H.lookup memoTable key
-  pure $ fmap (const $ fromJust <$> H.lookup memoTable key) res
-{-# INLINE lookupMemoizedComputeSound #-}
-
-memoizeComputeSound :: (Ptr Pulse -> IO (Int -> IO Pulse)) -> MSC (Ptr Pulse -> IO ())
-memoizeComputeSound cs = do
-  key <- liftIO $ HashKey <$> makeStableName cs
-  MemoComputeSound hashTable <- MSC $ lift $ lift $ snd <$> get
-  liftIO $ H.insert hashTable key nullPtr
-  pure $ \ptr -> H.insert hashTable key ptr
-{-# INLINE memoizeComputeSound #-}
-
-mapComputeSound :: (a -> b) -> MSC (ComputeSound a) -> MSC (ComputeSound b)
-mapComputeSound f cs = do
-  (ic, p) <- fmap (fmap (fmap f .)) <$> asIndexCompute cs
-  stableF <- liftIO $ makeStableName f
-  pure $ ComputeSound (\chooseIc _ -> chooseIc ic) (CIMap stableF p)
-{-# INLINE mapComputeSound #-}
-
-asIndexCompute :: MSC (ComputeSound a) -> MSC (Ptr Pulse -> IO (Int -> IO a), ComputationInfo a)
-asIndexCompute msc = do
-  (ComputeSound f p) <- msc
-  f
-    (pure . (,p))
-    ( \w -> do
-        ptrOffset <- arenaAllocate
-        pure 
-          ( \basePtr ->
-              do
-                let ptr = ptrOffset basePtr
-                w basePtr ptr
-                pure $ \index -> peek (ptr `plusPtr` (index * pulseSize)),
-            p
-          )
-    )
-{-# INLINE asIndexCompute #-}
-
-asWriteMemory :: MSC (ComputeSound Pulse) -> MSC (Ptr Pulse -> Ptr Pulse -> IO ())
-asWriteMemory mcs =
-  mcs >>= \(ComputeSound f p) ->
-    f
-      ( \ic -> do
-          sr <- MSC ask
-          memoized <- lookupMemoizedComputeSound ic
-          case memoized of
-            Just getPtr -> do
-              -- liftIO $ print "Memo"
-              pure $ \_basePtr ptr -> do
-                source <- getPtr
-                copyBytes source ptr (sr.samples * pulseSize)
-            Nothing -> do
-              -- liftIO $ print "Written"
-              writePtr <- memoizeComputeSound ic
-              pure $
-                \basePtr ptr -> do
-                  writePtr ptr
-                  when (sr.samples > 0) $ do
-                    ic' <- ic basePtr
-                    forM_ [0 .. pred sr.samples] $ \i -> do
-                      v <- ic' i
-                      poke (ptr `plusPtr` (i * pulseSize)) v
-      )
-      pure
-{-# INLINE asWriteMemory #-}
-
-pulseSize :: Int
-pulseSize = sizeOf (undefined :: Pulse)
 
 -- data ComputeSound a where
 --   WriteMemory :: (Ptr Pulse -> IO ()) -> ComputeSound Pulse
@@ -464,44 +308,6 @@ pulseSize = sizeOf (undefined :: Pulse)
 -- from :: ComputeSound2 a -> ComputeSound a
 -- from (ComputeSound2 f) = f WriteMemory IndexCompute
 
-data ComputeSound a = ComputeSound
-  { compute ::
-      forall b.
-      ((Ptr Pulse -> IO (Int -> IO a)) -> b) ->
-      ((a ~ Pulse) => (Ptr Pulse -> Ptr Pulse -> IO ()) -> b) ->
-      b,
-    computeInfo :: ComputationInfo a
-  }
-
-newtype HashKey = HashKey (StableName (Ptr Pulse -> IO (Int -> IO Pulse))) deriving (Generic, Eq)
-
-instance Hashable HashKey where
-  hash (HashKey stableName) = hashStableName stableName
-
-newtype MemoComputeSound = MemoComputeSound (H.BasicHashTable HashKey (Ptr Pulse))
-
-newtype MSC a = MSC (ReaderT SampleRate (WriterT (Sum Int) (StateT (Int, MemoComputeSound) IO)) a) deriving (Functor, Applicative, Monad, MonadIO)
-
-runMSC :: SampleRate -> MSC (ComputeSound Pulse) -> Ptr Pulse -> IO ()
-runMSC sr msc samplePtr = do
-  let (MSC r) = asWriteMemory msc
-  hashTable <- H.new
-  (writeSamples, Sum size) <- evalStateT (runWriterT (runReaderT r sr)) (0, MemoComputeSound hashTable)
-  arenaPtr <- mallocBytes (size * sizeOf (undefined :: Pulse))
-  writeSamples arenaPtr samplePtr
-  free arenaPtr
-{-# INLINE runMSC #-}
-
-zipWithCompute :: (a -> b -> c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
-zipWithCompute f msc1 msc2 = do
-  ic1 <- asIndexCompute msc1
-  ic2 <- asIndexCompute msc2
-  pure $ ComputeSound (\chooseIc _ -> chooseIc $ \basePtr -> do
-    ic1' <- ic1 basePtr
-    ic2' <- ic2 basePtr
-    pure $ \i -> f <$> ic1' i <*> ic2' i)
-{-# INLINE zipWithCompute #-}
-
 -- | A Kernel for convolution
 data Kernel p = Kernel
   { coefficients :: Percentage -> Float,
@@ -512,13 +318,10 @@ data Kernel p = Kernel
 -- | Convolvution of a 'Sound' where the 'Kernel' size is
 -- determined by 'Percentage's of the sound
 convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse
-convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \msc -> do
-  sr <- getSR
-  ptrOffset <- arenaAllocate
-  wm <- asWriteMemory msc
-  let size = ceiling $ sizeP * fromIntegral sr.samples
-      offset = round $ offsetP * fromIntegral sr.samples
-
+convolve (Kernel coefficients sizeP offsetP) = mapComputation $ mapWholeComputation $ \wholeSound ->
+  let n = M.unSz $ M.size wholeSound
+      size = ceiling $ sizeP * fromIntegral n
+      offset = round $ offsetP * fromIntegral n
       stencil = M.makeStencil (M.Sz1 size) offset $ \getV ->
         sum $ [0 .. pred size] <&> \i -> getV (i - offset) * (computedCoefficients M.! i)
       computedCoefficients =
@@ -528,16 +331,7 @@ convolve (Kernel coefficients sizeP offsetP) = mapComputation $ \msc -> do
             else M.generate M.Seq (M.Sz1 size) $ \i ->
               coerce @_ @Pulse $
                 coefficients (fromIntegral i / fromIntegral (size - 1))
-  pure $ ComputeSound $ \_ chooseWm -> chooseWm $ \basePtr ptr -> do
-    let wholeSoundPtr = ptrOffset basePtr
-    wm basePtr wholeSoundPtr
-    wholeSound <- vectorFromPtr wholeSoundPtr sr.samples
-    convolved <- mVectorFromPtr ptr sr.samples
-    M.computeInto convolved $ M.mapStencil M.Reflect stencil wholeSound
-
---       convolved = M.compute @M.S $ M.mapStencil M.Reflect stencil wholeSound
--- M.compute @M.S $ M.generate M.Seq (M.Sz1 sr.samples) $ c' . CurrentSample
---    in \cs -> convolved M.! cs.index
+   in M.mapStencil M.Reflect stencil wholeSound
 {-# INLINE convolve #-}
 
 -- | Convolution of a 'Sound' where the 'Kernel' size is
@@ -551,41 +345,12 @@ convolveDuration (Kernel coefficients sizeD offsetD) sound@(TimedSound d _) =
 
 -- | Compute a value once and then reuse it while computing all samples
 computeOnce :: (SampleRate -> a) -> Sound d (a -> b) -> Sound d b
-computeOnce f = mapComputation $ \msc -> do
-  sr <- getSR
-  ic <- asIndexCompute msc
-  pure $ ComputeSound $ \chooseIc _ -> chooseIc $ \basePtr -> do
-    let a = f sr
-    fmap (fmap ($ a) .) (ic basePtr)
+computeOnce f = mapComputation $ modifyIndexCompute id $ \sr ->
+  let a = f sr
+   in \oldCompute index -> ($ a) <$> oldCompute index
 {-# INLINE computeOnce #-}
 
--- | Compute a whole sound so that you can look into the past and future
+-- | Modify all samples of a sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
--- computeWholeSound :: (M.Vector M.D a -> CurrentSample -> b) -> Sound d a -> Sound d b
--- computeWholeSound f = mapComputation $ \c sr ->
---   let c' = c sr
---       a = M.generate M.Seq (M.Sz1 sr.samples) $ c' . CurrentSample
---    in f a
-mVectorFromPtr :: Ptr Pulse -> Int -> IO (M.MVector M.RealWorld M.S Pulse)
-mVectorFromPtr ptr len = do
-  fPtr <- newForeignPtr_ ptr
-  let mVector = VM.unsafeFromForeignPtr0 fPtr len
-  pure $ M.fromStorableMVector mVector
-
-vectorFromPtr :: Ptr Pulse -> Int -> IO (M.Vector M.S Pulse)
-vectorFromPtr ptr len = do
-  fPtr <- newForeignPtr_ ptr
-  let vector = V.unsafeFromForeignPtr0 fPtr len
-  pure $ M.fromStorableVector M.Seq vector
-
-data ComputationInfo a where
-  CIZipSound :: StableName (a -> b -> c) -> ComputationInfo a -> ComputationInfo b -> ComputationInfo c
-  CIMap :: StableName (a -> b) -> ComputationInfo a -> ComputationInfo b
-  CIConstant :: StableName a -> ComputationInfo a
-  CITime :: ComputationInfo Float
-  CIProgress :: ComputationInfo Progress
-  CISequentially :: ComputationInfo a -> ComputationInfo a -> ComputationInfo a
-  CIParallel :: ComputationInfo Pulse -> ComputationInfo Pulse -> ComputationInfo Pulse
-  CISampleIndex :: ComputationInfo Int
-
--- data ComputationInfo a = ComputationInfo SampleRate (ComputationInfoPart a)
+modifyWholeSound :: M.Load r M.Ix1 Pulse => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
+modifyWholeSound f = mapComputation $ mapWholeComputation f
