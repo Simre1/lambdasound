@@ -141,7 +141,6 @@ asWriteMemory mcs =
               pure
                 ( \_basePtr ptr -> do
                     source <- getPtr
-                    -- putStrLn ("From:" ++ show source ++ " To:" ++ show ptr)
                     copyBytes ptr source (sr.samples * pulseSize),
                   p
                 )

@@ -34,4 +34,4 @@ melody =
    in mel >>> end
 
 note :: Semitone -> Sound T Pulse
-note st = setDuration 1 $ easeInOut 4 $ asNote harmonic st
+note st = setDuration 1 $ easeInOut 4 $ asNote (harmonic sineWave) st

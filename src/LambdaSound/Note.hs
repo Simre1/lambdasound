@@ -1,6 +1,5 @@
 module LambdaSound.Note where
 
-import LambdaSound.Samples
 import LambdaSound.Sound
 
 -- | Semitones are tones like 'c4', 'd4' or 'c5'.

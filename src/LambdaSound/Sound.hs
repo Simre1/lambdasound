@@ -7,6 +7,7 @@ module LambdaSound.Sound
     Progress (..),
     Percentage (..),
     SampleRate (..),
+    Hz(..),
     DetermineDuration,
 
     -- ** Combinators
@@ -121,14 +122,15 @@ sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) =
 -- | Same as 'sequentially2'
 (>>>) :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
 (>>>) = sequentially2
+infixl 5 >>>
 
 -- | Combine a list of sounds in a sequential manner.
 sequentially :: [Sound T Pulse] -> Sound T Pulse
 sequentially = foldl' sequentially2 mempty
 
 -- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
-time :: Sound I Float
-time = InfiniteSound $ makeIndexCompute $ \sr index ->
+time :: Sound I Pulse
+time = InfiniteSound $ makeIndexCompute $ \sr index -> coerce $
   fromIntegral index * sr.period
 
 -- | Get the 'Progress' of a 'Sound'.
@@ -203,12 +205,13 @@ diminish x = raise $ 1 / x
 -- such that the previous sound fits within the resulting one.
 -- The resuling sound is a 'T'imed 'Sound'.
 setDuration :: Duration -> Sound d a -> Sound T a
-setDuration d (TimedSound _ c) = TimedSound d c
-setDuration d (InfiniteSound c) = TimedSound d c
+setDuration d (TimedSound _ c) = TimedSound (max d 0) c
+setDuration d (InfiniteSound c) = TimedSound (max d 0) c
 
 -- | Same as `setDuration` but in operator form
 (|->) :: Duration -> Sound d a -> Sound 'T a
 (|->) = setDuration
+infix 7 |->
 
 -- | Scales the 'Duration' of a 'Sound'.
 -- The following makes a sound twice as long:

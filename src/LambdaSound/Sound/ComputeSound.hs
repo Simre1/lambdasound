@@ -1,10 +1,8 @@
 module LambdaSound.Sound.ComputeSound where
 
-import Control.DeepSeq (NFData)
 import Data.Hashable
 import Data.SomeStableName
 import Foreign.Ptr
-import Foreign.Storable (Storable)
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types (Pulse)
 
