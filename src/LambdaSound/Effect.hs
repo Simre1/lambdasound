@@ -55,4 +55,3 @@ applyEnvelope envelope sound =
 -- | Add some harmonic frequencies
 harmonic :: (Hz -> Sound I Pulse) -> Hz -> Sound I Pulse
 harmonic f hz = parallel $ (\x -> reduce x $ f (coerce x * hz)) <$> take 6 [1 ..]
-{-# INLINE harmonic #-}

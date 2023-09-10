@@ -114,8 +114,8 @@ eqSound s1 s2 = (==) <$> sampleSound (Hz 100) s1 <*> sampleSound (Hz 100) s2
 
 almostEqSound :: Sound T Pulse -> Sound T Pulse -> IO Bool
 almostEqSound s1 s2 = do
-  x <- sampleSound (Hz 100) s1
-  y <- sampleSound (Hz 100) s2
+  x <- sampleSound 100 s1
+  y <- sampleSound 100 s2
   pure $ M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
   where
     epsilon = 5e-6

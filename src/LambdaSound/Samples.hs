@@ -5,6 +5,7 @@ import Data.Fixed (mod')
 import Data.Vector.Storable qualified as V
 import LambdaSound.Sound
 import System.Random as R
+import Debug.Trace (traceShowId)
 
 
 -- | Pure sinus sound

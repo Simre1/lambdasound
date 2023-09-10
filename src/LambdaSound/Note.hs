@@ -13,7 +13,7 @@ pitchStandard = 440.0
 -- | Converts a semitone to the appropriate frequency based on 'pitchStandard'
 semitoneToHz :: Semitone -> Hz
 semitoneToHz n = pitchStandard * (2 ** (fromIntegral (fromEnum n) * 1.0 / 12.0))
-{-# INLINE semitoneToHz #-}
+
 -- | Raise a sound by the given amount of semitones.
 -- This only works for sounds which use the period length given
 -- in the compute step of the sound. 'pulse' works but 'noise' does not.
@@ -21,18 +21,15 @@ semitoneToHz n = pitchStandard * (2 ** (fromIntegral (fromEnum n) * 1.0 / 12.0))
 -- > raiseSemitones 2 (asNote pulse c3) = asNote pulse d3
 raiseSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 raiseSemitones x = raise (2 ** (fromIntegral x / 12))
-{-# INLINE raiseSemitones #-}
 
 -- | Diminishes a sound by the given amount of semitones
 diminishSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 diminishSemitones x = raiseSemitones (-x)
-{-# INLINE diminishSemitones #-}
 
 -- | Transforms a function taking a 'Hz' to one taking a 'Semitone'.
 -- Should be used with 'pulse' or 'harmonic'
 asNote :: (Hz -> a) -> Semitone -> a
 asNote f s = f (semitoneToHz s)
-{-# INLINE asNote #-}
 
 c1, d1, e1, f1, g1, a1, b1 :: Semitone
 c1 = -45

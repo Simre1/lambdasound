@@ -6,8 +6,6 @@ import Foreign.Ptr
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types (Pulse)
 
-newtype TimeDelta = TimeDelta Float
-
 data ComputeSound a = ComputeSound
   { compute ::
       forall b.

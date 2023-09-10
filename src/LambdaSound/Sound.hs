@@ -239,24 +239,39 @@ reverseSound = mapComputation $ modifyIndexCompute $ \sr oldCompute index ->
 -- | Drop parts of a sound similar to 'drop' for lists
 dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD msc) = TimedSound (originalD - dropD) $ do
-  changeSampleRate (\sr -> sr {samples = paddedSamples sr}) $
+  sr <- getSR
+  changeSampleRate (const $ sr {samples = paddedSamples sr}) $
     modifyIndexCompute
-      (\sr f i -> f (i + paddedSamples sr - sr.samples))
+      ( \_ ->
+          let ps = paddedSamples sr
+           in \f i -> f (i + ps - sr.samples)
+      )
       msc
   where
     dropD = max 0 $ min originalD dropD'
     droppedFactor = min 1 $ dropD / originalD
     factor = 1 - droppedFactor
-    paddedSamples sr = if droppedFactor == 1 then 0 else round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
+    paddedSamples sr =
+      if droppedFactor == 1
+        then 0
+        else round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
 
 -- | Take parts of a sound similar to 'take' for lists
 takeSound :: Duration -> Sound T a -> Sound T a
 takeSound takeD' (TimedSound originalD msc) =
-  TimedSound takeD $
-    changeSampleRate (\sr -> sr {samples = if takeD == 0 then 0 else round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)}) $
-      modifyIndexCompute
-        (\_ f -> f)
-        msc
+  TimedSound takeD
+    $ changeSampleRate
+      ( \sr ->
+          sr
+            { samples =
+                if takeD == 0
+                  then 0
+                  else round $ fromIntegral @_ @Float sr.samples * (1 / coerce factor)
+            }
+      )
+    $ modifyIndexCompute
+      (\_ f -> f)
+      msc
   where
     takeD = max 0 $ min takeD' originalD
     factor = takeD / originalD

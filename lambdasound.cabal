@@ -27,8 +27,7 @@ library
         LambdaSound.Note,
         LambdaSound.Cache,
         LambdaSound.Plot,
-        LambdaSound.Sampling,
-        LambdaSound.SampleDesign
+        LambdaSound.Sampling
     other-modules:
         LambdaSound.Sound.MSC,
         LambdaSound.Sound.ComputeSound,
@@ -63,8 +62,7 @@ library
         OverloadedRecordDot,
         NoFieldSelectors,
         DataKinds,
-        TypeFamilies,
-        StrictData
+        TypeFamilies
     default-language: GHC2021
     ghc-options: -O2
 

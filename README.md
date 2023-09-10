@@ -13,12 +13,12 @@ sound440Hz = sineWave 440
 
 -- Three infinite sounds in parallel
 triad :: Sound I Pulse
-triad = parallel $ fmap (asNote pulse) [c4, e4, g4]
+triad = parallel $ fmap (asNote sineWave) [c4, e4, g4]
 
 -- Five sequential 1 second sounds 
 ascending :: Sound T Pulse
 ascending = sequentially $
-  fmap (setDuration 1 . asNote pulse) [c4,d4,e4,f4,g4]
+  fmap (setDuration 1 . asNote sineWave) [c4,d4,e4,f4,g4]
 
 -- You can cut apart sounds with takeSound and dropSound
 ascendingPart :: Sound T Pulse
