@@ -6,6 +6,8 @@ import Foreign.Ptr
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types (Pulse)
 
+newtype TimeDelta = TimeDelta Float
+
 data ComputeSound a = ComputeSound
   { compute ::
       forall b.
@@ -15,6 +17,13 @@ data ComputeSound a = ComputeSound
     computeInfo :: ComputationInfo
   }
 
+instance Eq (ComputeSound a) where
+  (ComputeSound _ a) == (ComputeSound _ b) = a == b
+
+instance Hashable (ComputeSound a) where
+  hashWithSalt x (ComputeSound _ a) = hashWithSalt x a
+  hash (ComputeSound _ a) = hash a
+
 data ComputationInfo
   = ComputationInfoZip SomeStableName ComputationInfo ComputationInfo
   | ComputationInfoMap SomeStableName ComputationInfo
@@ -22,9 +31,10 @@ data ComputationInfo
   | ComputationInfoSequentially ComputationInfo ComputationInfo
   | ComputationInfoParallel ComputationInfo ComputationInfo
   | ComputationInfoMakeIndexCompute SomeStableName
-  | ComputationInfoModifyIndexCompute SomeStableName SomeStableName ComputationInfo
+  | ComputationInfoModifyIndexCompute SomeStableName ComputationInfo
+  | ComputationInfoModifyIndexCompute2 SomeStableName ComputationInfo ComputationInfo
   | ComputationInfoMapWholeComputation SomeStableName ComputationInfo
+  | ComputationInfoChangeSampleRate SomeStableName ComputationInfo
   deriving (Eq, Generic)
 
 instance Hashable ComputationInfo
-

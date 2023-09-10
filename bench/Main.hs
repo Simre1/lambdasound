@@ -14,7 +14,8 @@ main =
           bench "Some Sounds" $ nfSound someSounds,
           bench "Noise" $ nfSound noiseSound,
           bench "Convolution" $ nfSound convolutionSound,
-          bench "long Sound" $ nfSound longSound
+          bench "long Sound" $ nfSound longSound,
+          bench "modulated sound" $ nfSound modulatedSound
         ]
     ]
 
@@ -22,18 +23,21 @@ nfSound :: Sound T Pulse -> Benchmarkable
 nfSound = nfIO . sampleSound 44100
 
 simplePulse :: Sound T Pulse
-simplePulse = 3 |-> pulse 440
+simplePulse = 3 |-> sineWave 440
 
 simpleHarmonic :: Sound T Pulse
-simpleHarmonic = 3 |-> harmonic 440
+simpleHarmonic = 3 |-> harmonic sineWave 440
 
 someSounds :: Sound T Pulse
-someSounds =
+someSounds =  
   sequentially
-    [ 1 |-> parallel [harmonic 440, harmonic 500, harmonic 1000],
-      1 |-> harmonic 200,
-      1 |-> harmonic 2000
+    [ 1 |-> parallel [harmonic sineWave 440, harmonic sineWave 500, harmonic sineWave 1000],
+      1 |-> harmonic sineWave 200,
+      1 |-> harmonic sineWave 2000
     ]
+
+modulatedSound :: Sound T Pulse
+modulatedSound = someSounds
 
 noiseSound :: Sound T Pulse
 noiseSound = 3 |-> noise 42

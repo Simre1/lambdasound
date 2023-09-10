@@ -10,7 +10,7 @@ song :: Sound T Pulse
 song = melody <> reduce 2 background
 
 background :: Sound T Pulse
-background = cache $ 
+background =  
     sequentially $
       mconcat $
         replicate 4 $
@@ -25,7 +25,7 @@ background = cache $
 melody :: Sound T Pulse
 melody =
   let mel =
-        cache $
+        
           sequentially $
             (++ [end]) $
               mconcat $

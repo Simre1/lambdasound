@@ -8,26 +8,31 @@ import System.Random as R
 
 
 -- | Pure sinus sound
+-- Warm and round
 sineWave :: Hz -> Sound I Pulse
 sineWave hz = (\t -> sin (coerce hz * coerce t * 2 * pi)) <$> time
-{-# INLINE sineWave #-}
 
 
 -- | Triangle wave
+-- Similar to sine but colder
 triangleWave :: Hz -> Sound I Pulse
 triangleWave hz =
   fmap
     ( \t ->
-        let x = (coerce hz * t) `mod'` 1
+        let x = (coerce hz * coerce t) `mod'` 1
          in if x < 0.5
               then x * 4 - 1
               else 3 - x * 4
     )
     time
 
+-- | Produces a sawtooth wave
+-- Warm and sharp
 sawWave :: Hz -> Sound I Pulse
-sawWave hz = (\t -> (coerce hz * t * 2) `mod'` 2 - 1) <$> time
+sawWave hz = (\t -> (coerce hz * coerce t * 2) `mod'` 2 - 1) <$> time
 
+-- | Produces a square wave
+-- Cold
 squareWave :: Hz -> Sound I Pulse
 squareWave hz = (\t -> fromIntegral @Int $ round ((coerce hz * t) `mod'` 1) * 2 - 1) <$> time
 
@@ -43,4 +48,4 @@ noise initial =
           (mkStdGen initial)
     )
     (fmap Pulse . flip (V.!) <$> sampleIndex)
-{-# INLINE noise #-}
+

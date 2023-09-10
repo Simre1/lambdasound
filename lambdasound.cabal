@@ -26,7 +26,9 @@ library
         LambdaSound.Play,
         LambdaSound.Note,
         LambdaSound.Cache,
-        LambdaSound.Sampling
+        LambdaSound.Plot,
+        LambdaSound.Sampling,
+        LambdaSound.SampleDesign
     other-modules:
         LambdaSound.Sound.MSC,
         LambdaSound.Sound.ComputeSound,
@@ -52,14 +54,17 @@ library
         transformers,
         unordered-containers,
         hashable,
-        hashtables
+        hashtables,
+        text,
+        ansi-terminal
     hs-source-dirs:   src
     default-extensions:
         DuplicateRecordFields,
         OverloadedRecordDot,
         NoFieldSelectors,
         DataKinds,
-        TypeFamilies
+        TypeFamilies,
+        StrictData
     default-language: GHC2021
     ghc-options: -O2
 

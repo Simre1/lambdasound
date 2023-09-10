@@ -14,15 +14,22 @@ import Data.Monoid
 import Data.SomeStableName (makeSomeStableName)
 import Data.Vector.Storable qualified as V (unsafeFromForeignPtr0)
 import Data.Vector.Storable.Mutable qualified as VM (unsafeFromForeignPtr0)
-import Foreign.ForeignPtr (newForeignPtr_, newForeignPtr)
+import Foreign.ForeignPtr (newForeignPtr, newForeignPtr_)
 import Foreign.Marshal (copyBytes, free, mallocBytes)
+import Foreign.Marshal.Alloc (finalizerFree)
 import Foreign.Ptr
 import Foreign.Storable (Storable (..))
 import LambdaSound.Sound.ComputeSound
 import LambdaSound.Sound.Types
-import Foreign.Marshal.Alloc (finalizerFree)
+import Data.Coerce (coerce)
 
-makeIndexCompute :: (SampleRate -> Int -> a) -> MSC (ComputeSound a)
+
+makeSamplingInfo :: Hz -> Duration -> SamplingInfo
+makeSamplingInfo hz duration = 
+  let period = coerce $ 1 / hz
+  in SamplingInfo period (round $ coerce duration / period)
+
+makeIndexCompute :: (SamplingInfo -> Int -> a) -> MSC (ComputeSound a)
 makeIndexCompute f = do
   sr <- getSR
   stableF <- makeSomeStableName f
@@ -34,20 +41,43 @@ makeIndexCompute f = do
       (ComputationInfoMakeIndexCompute stableF)
 {-# INLINE makeIndexCompute #-}
 
-modifyIndexCompute :: (SampleRate -> SampleRate) -> (SampleRate -> (Int -> IO a) -> Int -> IO b) -> MSC (ComputeSound a) -> MSC (ComputeSound b)
-modifyIndexCompute changeSr compute msc = do
+changeSampleRate :: (SamplingInfo -> SamplingInfo) -> MSC (ComputeSound a) -> MSC (ComputeSound a)
+changeSampleRate changeSr msc = do
   sr <- getSR
   stableChangeSr <- makeSomeStableName changeSr
+  ComputeSound compute subCi <- withSR (changeSr sr) msc
+  pure $ ComputeSound compute (ComputationInfoChangeSampleRate stableChangeSr subCi)
+{-# INLINE changeSampleRate #-}
+
+modifyIndexCompute :: (SamplingInfo -> (Int -> IO a) -> Int -> IO b) -> MSC (ComputeSound a) -> MSC (ComputeSound b)
+modifyIndexCompute compute msc = do
+  sr <- getSR
   stableCompute <- makeSomeStableName compute
-  (ic, subCi) <- withSR (changeSr sr) $ asIndexCompute msc
+  (ic, subCi) <- asIndexCompute msc
   pure $
     ComputeSound
       ( \chooseIc _ -> chooseIc $ \basePtr -> do
           oldCompute <- ic basePtr
           pure $ compute sr oldCompute
       )
-      (ComputationInfoModifyIndexCompute stableChangeSr stableCompute subCi)
+      (ComputationInfoModifyIndexCompute stableCompute subCi)
 {-# INLINE modifyIndexCompute #-}
+
+modifyIndexCompute2 :: (SamplingInfo -> (Int -> IO a) -> (Int -> IO b) -> Int -> IO c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
+modifyIndexCompute2 compute msc1 msc2 = do
+  sr <- getSR
+  stableCompute <- makeSomeStableName compute
+  (ic1, subCi1) <- asIndexCompute msc1
+  (ic2, subCi2) <- asIndexCompute msc2
+  pure $
+    ComputeSound
+      ( \chooseIc _ -> chooseIc $ \basePtr -> do
+          oldCompute1 <- ic1 basePtr
+          oldCompute2 <- ic2 basePtr
+          pure $ compute sr oldCompute1 oldCompute2
+      )
+      (ComputationInfoModifyIndexCompute2 stableCompute subCi1 subCi2)
+{-# INLINE modifyIndexCompute2 #-}
 
 computeSequentially :: Float -> MSC (ComputeSound Pulse) -> MSC (ComputeSound Pulse) -> MSC (ComputeSound Pulse)
 computeSequentially factor c1 c2 =
@@ -92,6 +122,21 @@ mapComputeSound f cs = do
   stableF <- makeSomeStableName f
   pure $ ComputeSound (\chooseIc _ -> chooseIc ic) (ComputationInfoMap stableF p)
 {-# INLINE mapComputeSound #-}
+
+zipWithCompute :: (a -> b -> c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
+zipWithCompute f msc1 msc2 = do
+  (ic1, p1) <- asIndexCompute msc1
+  (ic2, p2) <- asIndexCompute msc2
+  stableF <- makeSomeStableName f
+  pure $
+    ComputeSound
+      ( \chooseIc _ -> chooseIc $ \basePtr -> do
+          ic1' <- ic1 basePtr
+          ic2' <- ic2 basePtr
+          pure $ \i -> f <$> ic1' i <*> ic2' i
+      )
+      (ComputationInfoZip stableF p1 p2)
+{-# INLINE zipWithCompute #-}
 
 mapWholeComputation :: (M.Load r M.Ix1 Pulse) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> MSC (ComputeSound Pulse) -> MSC (ComputeSound Pulse)
 mapWholeComputation f msc = do
@@ -163,11 +208,9 @@ asWriteMemory mcs =
 pulseSize :: Int
 pulseSize = sizeOf (undefined :: Pulse)
 
-newtype MSC a = MSC (ReaderT SampleRate (WriterT (Sum Int) (StateT (Int, MemoComputeSound) IO)) a) deriving (Functor, Applicative, Monad, MonadIO)
+newtype MSC a = MSC (ReaderT SamplingInfo (WriterT (Sum Int) (StateT (Int, MemoComputeSound) IO)) a) deriving (Functor, Applicative, Monad, MonadIO)
 
-newtype MemoComputeSound = MemoComputeSound (H.BasicHashTable (SampleRate, ComputationInfo) (Ptr Pulse))
-
-runMSC :: SampleRate -> MSC (ComputeSound Pulse) -> Ptr Pulse -> IO ()
+runMSC :: SamplingInfo -> MSC (ComputeSound Pulse) -> Ptr Pulse -> IO ()
 runMSC sr msc samplePtr = do
   let (MSC r) = asWriteMemory msc
   hashTable <- H.new
@@ -177,33 +220,18 @@ runMSC sr msc samplePtr = do
   free arenaPtr
 {-# INLINE runMSC #-}
 
-sampleMSC :: SampleRate -> MSC (ComputeSound Pulse) -> IO (M.Vector M.S Pulse)
-sampleMSC sampleRate msc = do
-  samplePtr <- mallocBytes (sampleRate.samples * sizeOf (undefined :: Pulse))
-  runMSC sampleRate msc samplePtr
+sampleMSC :: SamplingInfo -> MSC (ComputeSound Pulse) -> IO (M.Vector M.S Pulse)
+sampleMSC samplingInfo msc = do
+  samplePtr <- mallocBytes (samplingInfo.samples * sizeOf (undefined :: Pulse))
+  runMSC samplingInfo msc samplePtr
   fptr <- liftIO $ newForeignPtr finalizerFree samplePtr
-  pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr sampleRate.samples
+  pure $ M.fromStorableVector M.Seq $ V.unsafeFromForeignPtr0 fptr samplingInfo.samples
 
-zipWithCompute :: (a -> b -> c) -> MSC (ComputeSound a) -> MSC (ComputeSound b) -> MSC (ComputeSound c)
-zipWithCompute f msc1 msc2 = do
-  (ic1, p1) <- asIndexCompute msc1
-  (ic2, p2) <- asIndexCompute msc2
-  stableF <- makeSomeStableName f
-  pure $
-    ComputeSound
-      ( \chooseIc _ -> chooseIc $ \basePtr -> do
-          ic1' <- ic1 basePtr
-          ic2' <- ic2 basePtr
-          pure $ \i -> f <$> ic1' i <*> ic2' i
-      )
-      (ComputationInfoZip stableF p1 p2)
-{-# INLINE zipWithCompute #-}
-
-getSR :: MSC SampleRate
+getSR :: MSC SamplingInfo
 getSR = MSC ask
 {-# INLINE getSR #-}
 
-withSR :: SampleRate -> MSC a -> MSC a
+withSR :: SamplingInfo -> MSC a -> MSC a
 withSR sr (MSC r) = MSC $ local (const sr) r
 {-# INLINE withSR #-}
 
@@ -216,14 +244,16 @@ arenaAllocate = do
   pure (`plusPtr` (offset * pulseSize))
 {-# INLINE arenaAllocate #-}
 
-lookupMemoizedComputeSound :: SampleRate -> ComputationInfo -> MSC (Maybe (IO (Ptr Pulse)))
+newtype MemoComputeSound = MemoComputeSound (H.BasicHashTable (SamplingInfo, ComputationInfo) (Ptr Pulse))
+
+lookupMemoizedComputeSound :: SamplingInfo -> ComputationInfo -> MSC (Maybe (IO (Ptr Pulse)))
 lookupMemoizedComputeSound sr ci = do
   (_, MemoComputeSound memoTable) <- MSC $ lift $ lift get
   res <- liftIO $ H.lookup memoTable (sr, ci)
   pure $ fmap (const $ fromJust <$> H.lookup memoTable (sr, ci)) res
 {-# INLINE lookupMemoizedComputeSound #-}
 
-memoizeComputeSound :: SampleRate -> ComputationInfo -> MSC (Ptr Pulse -> IO ())
+memoizeComputeSound :: SamplingInfo -> ComputationInfo -> MSC (Ptr Pulse -> IO ())
 memoizeComputeSound sr ci = do
   MemoComputeSound hashTable <- MSC $ lift $ lift $ snd <$> get
   liftIO $ H.insert hashTable (sr, ci) nullPtr

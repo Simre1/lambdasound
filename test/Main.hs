@@ -30,8 +30,8 @@ genSound = do
   let basicSound =
         Gen.elem $
           setDuration 1 (constant 1)
-            :| [ setDuration 1 (pulse 440),
-                 setDuration 1 (harmonic 100),
+            :| [ setDuration 1 (sineWave 440),
+                 setDuration 1 (harmonic sineWave 100),
                  setDuration 1 (noise 42)
                ]
   join $

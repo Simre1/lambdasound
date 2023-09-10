@@ -54,6 +54,6 @@ cacheComputation msc = do
 
 computeCacheKey :: MSC (ComputeSound Pulse) -> IO Word64
 computeCacheKey msc = do
-  let sr = SampleRate 1 50
+  let sr = makeSamplingInfo 50 1
   floats <- sampleMSC sr msc
   pure $ fromIntegral $ hash $ M.toList $ M.map (* 1000) floats

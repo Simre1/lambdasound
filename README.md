@@ -9,7 +9,7 @@ then use combinators like `parallel`, `sequentially` or `dropSound` to manipulat
 ```haskell
 -- An infinite 440hz sinus curve
 sound440Hz :: Sound I Pulse
-sound440Hz = pulse 440 
+sound440Hz = sineWave 440 
 
 -- Three infinite sounds in parallel
 triad :: Sound I Pulse
@@ -43,7 +43,7 @@ descending = reverseSound ascending
 speedupDuringSound :: Sound d Pulse -> Sound d Pulse
 speedupDuringSound = changeTempo $ \progress -> progress ** 1.2
 
--- Play sound with a sample rate of 44000
+-- Play sound with a sample rate of 44100
 main :: IO ()
 main = do
   let volume = 0.5
@@ -66,11 +66,6 @@ You can also take a look at `example/Main.hs` for a bigger example and play it w
 - [x] take/drop for sounds
 - [x] More Semitones
 - [x] Caching
-
-## Wanted Features
-
-- [ ] More effects
-- [ ] More and better samples (especially ones similar to instruments)
 
 ## Building
 
