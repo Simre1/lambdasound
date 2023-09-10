@@ -13,6 +13,7 @@ import Foreign.Marshal (copyBytes)
 import Foreign.Storable (Storable (..))
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types
+import Control.Monad.ST
 
 
 makeDelayedResult :: (SamplingInfo -> Int -> a) -> ComputeSound a
@@ -151,6 +152,20 @@ mapSoundFromMemory f cs = ComputeSound $ \si memo -> do
       ComputationInfoMapMemory stableF ci
     )
 {-# INLINE mapSoundFromMemory #-}
+
+mapSoundFromMemoryST :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> ST M.RealWorld ()) -> ComputeSound Pulse -> ComputeSound Pulse
+mapSoundFromMemoryST f cs = ComputeSound $ \si memo -> do
+  (writeSamples, ci) <- asWriteResult cs si memo
+  stableF <- makeSomeStableName f
+  pure
+    ( WriteResult $ \dest -> do
+        wholeSoundMArray <- MU.unsafeMallocMArray (M.Sz1 si.samples)
+        writeSamples wholeSoundMArray
+        wholeSoundArray <- MU.unsafeFreeze M.Seq wholeSoundMArray
+        stToIO $ f wholeSoundArray dest,
+      ComputationInfoMapMemory stableF ci
+    )
+{-# INLINE mapSoundFromMemoryST #-}
 
 pulseSize :: Int
 pulseSize = sizeOf (undefined :: Pulse)

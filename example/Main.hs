@@ -1,14 +1,9 @@
 module Main where
 
-import Data.Coerce (coerce)
 import LambdaSound
-import LambdaSound.Filter
 
 main :: IO ()
-main = play 44100 0.4 $ x >>> x >>> x
-
-x = setDuration 1 (asNote sineWave c4)
--- applyIIRFilter (highPassFilter 1000  1) $ song
+main = play 44100 0.4 $ applyIIRFilter (highPassFilter 500 100) $ song
 
 song :: Sound T Pulse
 song = melody <> background

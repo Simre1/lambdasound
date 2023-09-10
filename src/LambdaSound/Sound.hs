@@ -39,6 +39,7 @@ module LambdaSound.Sound
     convolve,
     convolveDuration,
     modifyWholeSound,
+    modifyWholeSoundST,
 
     -- ** Making new sounds
     time,
@@ -57,6 +58,7 @@ import Data.Massiv.Array.Unsafe qualified as MU
 import LambdaSound.Sound.ComputeSound
 import LambdaSound.Sound.Types
 import System.IO.Unsafe (unsafePerformIO)
+import Control.Monad.ST
 
 -- | Some 'Sound's have a different while others do not.
 -- 'I'nfinite 'Sound's have no duration.
@@ -368,6 +370,11 @@ computeOnce f = mapComputation $ mapDelayedResult $ \si ->
 -- of a sound (e.g. IIR filter).
 modifyWholeSound :: (M.Load r M.Ix1 Pulse, M.Size r) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
 modifyWholeSound f = mapComputation $ mapSoundFromMemory f
+
+-- | Modify all samples of a sound so that you can look into the past and future
+-- of a sound (e.g. IIR filter).
+modifyWholeSoundST :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse  -> ST M.RealWorld ()) -> Sound d Pulse -> Sound d Pulse
+modifyWholeSoundST f = mapComputation $ mapSoundFromMemoryST f
 
 -- | Access the sample rate of an infinite sound
 withSamplingInfoI :: (SamplingInfo -> Sound I a) -> Sound I a
