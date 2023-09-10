@@ -14,8 +14,8 @@ main =
           bench "Some Sounds" $ nfSound someSounds,
           bench "Noise" $ nfSound noiseSound,
           bench "Convolution" $ nfSound convolutionSound,
-          bench "long Sound" $ nfSound longSound,
-          bench "modulated sound" $ nfSound modulatedSound
+          bench "Long Sound" $ nfSound longSound,
+          bench "Filtered sound" $ nfSound filteredSound
         ]
     ]
 
@@ -36,8 +36,8 @@ someSounds =
       1 |-> harmonic sineWave 2000
     ]
 
-modulatedSound :: Sound T Pulse
-modulatedSound = someSounds
+filteredSound :: Sound T Pulse
+filteredSound = applyIIRFilter (highPassFilter 1000 1) someSounds
 
 noiseSound :: Sound T Pulse
 noiseSound = 3 |-> noise 42

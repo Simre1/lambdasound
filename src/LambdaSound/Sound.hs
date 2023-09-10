@@ -31,6 +31,8 @@ module LambdaSound.Sound
     takeSound,
     changeTempo,
     changeTempoM,
+    withSamplingInfoI,
+    withSamplingInfoT,
 
     -- ** Convolution
     Kernel (..),
@@ -77,6 +79,23 @@ data Sound (d :: SoundDuration) a where
   InfiniteSound ::
     MSC (ComputeSound a) ->
     Sound I a
+
+data SoundType d where
+  InfiniteSoundType :: SoundType I
+  TimedSoundType :: SoundType T
+
+class DetermineSoundType d where
+  determineSoundType :: SoundType d
+
+instance DetermineSoundType I where
+  determineSoundType = InfiniteSoundType
+
+instance DetermineSoundType T where
+  determineSoundType = TimedSoundType
+
+getMSC :: Sound d a -> MSC (ComputeSound a)
+getMSC (InfiniteSound msc) = msc
+getMSC (TimedSound _ msc) = msc
 
 mapComputation :: (MSC (ComputeSound a) -> MSC (ComputeSound b)) -> Sound d a -> Sound d b
 mapComputation f (InfiniteSound msc) = InfiniteSound $ f msc
@@ -348,3 +367,18 @@ computeOnce f = mapComputation $ modifyIndexCompute $ \sr ->
 -- of a sound (e.g. IIR filter).
 modifyWholeSound :: (M.Load r M.Ix1 Pulse) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
 modifyWholeSound f = mapComputation $ mapWholeComputation f
+
+-- | Access the sample rate of an infinite sound
+withSamplingInfoI :: (SamplingInfo -> Sound I a) -> Sound I a
+withSamplingInfoI f = InfiniteSound msc
+  where msc = do
+          sr <- getSR
+          getMSC $ f sr
+
+-- | Access the sample rate of a timed sound. You also need to specify the 
+-- 'Duration' of the sound.
+withSamplingInfoT :: Duration -> (SamplingInfo -> Sound T a) -> Sound T a
+withSamplingInfoT duration f = TimedSound duration msc
+  where msc = do
+          sr <- getSR
+          getMSC $ f sr

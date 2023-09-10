@@ -19,7 +19,7 @@ newtype Progress = Progress Float deriving (Show, Eq, Floating, Num, Fractional,
 newtype Percentage = Percentage Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable, Enum)
 
 -- | Hz are the unit for frequencies. 440 Hz means that 440 oscillations happen per second
-newtype Hz = Hz Float deriving (Show, Eq, Ord, Num, Fractional, Floating, Enum)
+newtype Hz = Hz Float deriving (Show, Eq, Ord, Num, Fractional, Floating, Enum, Generic)
 
 -- | Time progresses while a 'Sound' is playing and is used to create samples.
 -- It is not guaranteed that 'Time' will correspond to the real runtime of a 'Sound' 
@@ -28,8 +28,11 @@ newtype Time = Time Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Re
 -- | Gives information about how many samples are needed during computation
 data SamplingInfo = SamplingInfo
   { period :: !Float,
-    samples :: !Int
+    samples :: !Int,
+    sampleRate :: Hz
   }
   deriving (Generic, Show, Eq)
+
+instance Hashable Hz
 
 instance Hashable SamplingInfo where

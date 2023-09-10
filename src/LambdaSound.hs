@@ -14,6 +14,9 @@ module LambdaSound
     -- * Sound samples
     module Sample,
 
+    -- * Filter sounds
+    module Filter,
+
     -- * Plotting sounds
     module Plot,
 
@@ -33,3 +36,4 @@ import LambdaSound.Plot as Plot
 import LambdaSound.Samples as Sample
 import LambdaSound.Sampling as Sampling
 import LambdaSound.Sound as Sound
+import LambdaSound.Filter as Filter

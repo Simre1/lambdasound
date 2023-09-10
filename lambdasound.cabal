@@ -27,7 +27,8 @@ library
         LambdaSound.Note,
         LambdaSound.Cache,
         LambdaSound.Plot,
-        LambdaSound.Sampling
+        LambdaSound.Sampling,
+        LambdaSound.Filter
     other-modules:
         LambdaSound.Sound.MSC,
         LambdaSound.Sound.ComputeSound,

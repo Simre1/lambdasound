@@ -2,9 +2,10 @@ module Main where
 
 import Data.Coerce (coerce)
 import LambdaSound
+import LambdaSound.Filter
 
 main :: IO ()
-main = play 44100 0.4 $ simpleReverb 0.2 song
+main = play 44100 0.4 $ applyIIRFilter (highPassFilter 1000  1) $ song
 
 song :: Sound T Pulse
 song = melody <> reduce 2 background

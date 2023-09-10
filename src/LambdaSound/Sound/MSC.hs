@@ -27,7 +27,7 @@ import Data.Coerce (coerce)
 makeSamplingInfo :: Hz -> Duration -> SamplingInfo
 makeSamplingInfo hz duration = 
   let period = coerce $ 1 / hz
-  in SamplingInfo period (round $ coerce duration / period)
+  in SamplingInfo period (round $ coerce duration / period) hz
 
 makeIndexCompute :: (SamplingInfo -> Int -> a) -> MSC (ComputeSound a)
 makeIndexCompute f = do
