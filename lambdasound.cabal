@@ -23,7 +23,7 @@ bug-reports:        https://github.com/Simre1/lambdasound/issues
 extra-source-files:
     README.md
     CHANGELOG.md
-
+    cabal.project 
 common warnings
     ghc-options: -Wall
 
@@ -113,7 +113,7 @@ test-suite lambdasound-test
         falsify >= 0.1.1 && < 0.2,
         massiv >= 1.0.4 && < 1.1
 
-test-suite lambdasound-bench
+benchmark lambdasound-bench
     import:           warnings
     default-language: GHC2021
     type:             exitcode-stdio-1.0
