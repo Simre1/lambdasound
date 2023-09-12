@@ -1,3 +1,5 @@
+-- | This module contains some basic samples which can be combined to
+-- generate interesting sounds 
 module LambdaSound.Samples where
 
 import Data.Coerce

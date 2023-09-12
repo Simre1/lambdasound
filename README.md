@@ -1,8 +1,9 @@
 # LambdaSound
 
 A Haskell libary for generating low-level sounds with high-level combinators.
-You can create sounds by defining an audio signal via a mathematical function and
-then use combinators like `parallel`, `sequentially` or `dropSound` to manipulate them.
+
+You can create sounds as a list of floats and then manipulate them with 
+combinators like `parallel`, `sequentially` or `dropSound`.
 
 ## Examples
 
@@ -20,7 +21,7 @@ ascending :: Sound T Pulse
 ascending = sequentially $
   fmap (setDuration 1 . asNote sineWave) [c4,d4,e4,f4,g4]
 
--- You can cut apart sounds with takeSound and dropSound
+-- Cut apart sounds with takeSound and dropSound
 ascendingPart :: Sound T Pulse
 ascendingPart = takeSound 1 $ dropSound 1 ascending
 
@@ -53,20 +54,21 @@ main = do
 
 You can also take a look at `example/Main.hs` for a bigger example and play it with `cabal run example`.
 
-## Current Features
+## Feature Overview
 
-- [x] Parallel combinator
-- [x] Sequence combinator
-- [x] Zip combinator
-- [x] Volume combinators
-- [x] Semitone combinators
-- [x] Whole sound combinators
-- [x] Convolution
-- [x] Scaling speed
-- [x] take/drop for sounds
-- [x] More Semitones
-- [x] Caching
-- [x] IIR filters
+- Play sounds with SDL2
+- Save sounds as WAV
+- Create raw audio samples by defining a vector of floats
+- Manipulate the duration of a sound
+- Combine sounds via `parallel`, `sequentially` or `zipSound`
+- Change volume
+- Modify the pitch
+- Create a sound and then map over its samples
+- Convolve sounds
+- IIR filters
+- Cut apart sounds with `takeSound` and `dropSound`
+- Scaling playing speed
+- Cache expensive to compute sounds in your XDG-cache directory
 
 ## Building
 

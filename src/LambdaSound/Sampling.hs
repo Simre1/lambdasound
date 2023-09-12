@@ -1,3 +1,5 @@
+-- | This module contains functions to sample sound and to save it in a file.
+-- The @LambdaSound.Play@ module exports a function to play sounds directly.
 module LambdaSound.Sampling (sampleSound, sampleSoundRaw, saveWav, saveRawPCM) where
 
 import Codec.Audio.Wave

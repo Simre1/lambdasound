@@ -10,9 +10,8 @@ easeInOut strength = zipSoundWith (\p -> (f p *)) progress
     f p = coerce $ -(2 * p - 1) ** (abs (fromIntegral strength) * 2) + 1
 
 -- | Repeats a sound such that:
--- @
--- repeatSound 3 sound = sound >>> sound >>> sound
--- @
+-- 
+-- > repeatSound 3 sound = sound >>> sound >>> sound
 repeatSound :: Int -> Sound T Pulse -> Sound T Pulse
 repeatSound n s
   | n <= 0 = mempty

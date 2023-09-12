@@ -64,6 +64,7 @@ calcAQ :: Float -> Float -> Float
 calcAQ _ 0 = 0
 calcAQ w0 q = sin w0 / (2 * q)
 
+-- | Applies the IIR filter defined by the 'IIRParams' to the sound.
 applyIIRFilter :: (SamplingInfo -> IIRParams) -> Sound d Pulse -> Sound d Pulse
 applyIIRFilter makeParams sound = adoptDuration sound $ withSamplingInfo $ \si ->
   applyFilter (makeParams si) sound

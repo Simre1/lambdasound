@@ -1,3 +1,5 @@
+-- |
+-- This module exports all needed datatypes and all the combinators needed to manipulate them.
 module LambdaSound.Sound
   ( -- ** Sound types
     Sound (..),
@@ -53,10 +55,6 @@ module LambdaSound.Sound
     zipSoundWith,
     zipSound,
 
-    -- ** Convolution
-    Kernel (..),
-    convolve,
-    convolveDuration,
 
     -- ** Change play behavior of a sound
     changeTempo,
@@ -165,6 +163,8 @@ timedSequentially (TimedSound d1 c1) (TimedSound d2 c2) =
   TimedSound (d1 + d2) $
     computeSequentially (coerce $ d1 / (d1 + d2)) c1 c2
 
+-- | Append two infinite sounds where the 'Percentage' in the range @[0,1]@
+-- specified when the first sound ends and the next begins.
 infiniteSequentially :: Percentage -> Sound I Pulse -> Sound I Pulse -> Sound I Pulse
 infiniteSequentially factor' (InfiniteSound c1) (InfiniteSound c2) =
   InfiniteSound $
@@ -172,7 +172,7 @@ infiniteSequentially factor' (InfiniteSound c1) (InfiniteSound c2) =
   where
     factor = max 0 $ min 1 factor'
 
--- | Same as 'sequentially2'
+-- | Same as 'timedSequentially'
 (>>>) :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
 (>>>) = timedSequentially
 
@@ -182,16 +182,16 @@ infixl 5 >>>
 sequentially :: [Sound T Pulse] -> Sound T Pulse
 sequentially = foldl' timedSequentially mempty
 
--- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
+-- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'sineWave')
 time :: Sound I Time
 time = InfiniteSound $ do
   makeDelayedResult $ \si index ->
     coerce $ fromIntegral index * si.period
 
 -- | Get the 'Progress' of a 'Sound'.
--- 'Progress' of '0' means that the sound has just started
--- 'Progress' of '1' means that the sound has finished
--- 'Progress' greater than '1' or smaller than '0' is invalid
+-- 'Progress' of '0' means that the sound has just started.
+-- 'Progress' of '1' means that the sound has finished.
+-- 'Progress' greater than '1' or smaller than '0' is invalid.
 progress :: Sound I Progress
 progress = InfiniteSound $ makeDelayedResult $ \si index ->
   fromIntegral index / fromIntegral si.samples
@@ -216,7 +216,7 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ compu
 parallel :: (Monoid (Sound d Pulse)) => [Sound d Pulse] -> Sound d Pulse
 parallel = foldl' parallel2 mempty
 
--- | A 'Sound' with '0' volume
+-- | A 'Sound' with @0@ volume
 silence :: Sound I Pulse
 silence = constant 0
 
@@ -251,39 +251,39 @@ reduce :: Float -> Sound d Pulse -> Sound d Pulse
 reduce x = amplify (1 / x)
 
 -- | Raises the frequency of the 'Sound' by the given factor.
--- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
+-- Only works if the sound is based on some frequency (e.g. 'sineWave' but not 'noise')
 raise :: Float -> Sound d Pulse -> Sound d Pulse
 raise x = mapComputation $ \(ComputeSound compute) -> ComputeSound $ \si memo -> do
   compute (si {period = coerce x * si.period}) memo
 
--- | Diminishes the frequency of the 'Sound' by the given factor
+-- | Diminishes the frequency of the 'Sound' by the given factor.
 -- Only works if the sound is based on some frequency (e.g. 'pulse' but not 'noise')
 diminish :: Float -> Sound d Pulse -> Sound d Pulse
 diminish x = raise $ 1 / x
 
--- | Sets the duration of the 'Sound', scaling it
--- such that the previous sound fits within the resulting one.
+-- | Sets the duration of the 'Sound'.
 -- The resuling sound is a 'T'imed 'Sound'.
 setDuration :: Duration -> Sound d a -> Sound T a
 setDuration d (TimedSound _ c) = TimedSound (max d 0) c
 setDuration d (InfiniteSound c) = TimedSound (max d 0) c
 
--- | Same as `setDuration` but in operator form
+-- | Same as `setDuration` but in operator form.
 (|->) :: Duration -> Sound d a -> Sound 'T a
 (|->) = setDuration
 
 infix 7 |->
 
--- | Drop the duration associated with a 'Sound' and get an infinite sound again
+-- | Drop the duration associated with a 'Sound' and get an infinite sound again.
 -- If you have combined timed sounds with a sequence combinator and then drop
--- their duration, the sounds will keep their proportional length to each other.
--- The percentage of their play time stays the same.
+-- their 'Duration', the sounds will keep their proportional length to each other.
+-- Essentially, the percentage of their play time stays the same.
 dropDuration :: Sound d a -> Sound I a
 dropDuration (InfiniteSound cs) = InfiniteSound cs
 dropDuration (TimedSound _ cs) = InfiniteSound cs
 
 -- | Scales the 'Duration' of a 'Sound'.
 -- The following makes a sound twice as long:
+--
 -- > scaleDuration 2 sound
 scaleDuration :: Float -> Sound T a -> Sound T a
 scaleDuration x (TimedSound d c) = TimedSound (coerce x * d) c
@@ -374,38 +374,6 @@ changeTempoM (InfiniteSound msc1) =
       )
       msc1
 
--- | A Kernel for convolution
-data Kernel p = Kernel
-  { coefficients :: Percentage -> Float,
-    size :: p,
-    offset :: p
-  }
-
--- | Convolvution of a 'Sound' where the 'Kernel' size is
--- determined by 'Percentage's of the sound
-convolve :: Kernel Percentage -> Sound d Pulse -> Sound d Pulse
-convolve (Kernel coefficients sizeP offsetP) = mapComputation $ mapSoundFromMemory $ \wholeSound ->
-  let n = M.unSz $ M.size wholeSound
-      size = ceiling $ sizeP * fromIntegral n
-      offset = round $ offsetP * fromIntegral n
-      stencil = M.makeStencil (M.Sz1 size) offset $ \getV ->
-        M.sum $ M.imap (\i -> (*) $ getV (i - offset)) computedCoefficients
-      computedCoefficients =
-        M.compute @M.S $
-          if size <= 1
-            then M.singleton 0.5
-            else M.generate M.Seq (M.Sz1 size) $ \i ->
-              coerce @_ @Pulse $
-                coefficients (fromIntegral i / fromIntegral (size - 1))
-   in M.mapStencil M.Reflect stencil wholeSound
-
--- | Convolution of a 'Sound' where the 'Kernel' size is
--- determined by a 'Duration'.
-convolveDuration :: Kernel Duration -> Sound T Pulse -> Sound T Pulse
-convolveDuration (Kernel coefficients sizeD offsetD) sound@(TimedSound d _) =
-  convolve
-    (Kernel coefficients (coerce $ sizeD / d) (coerce $ offsetD / d))
-    sound
 
 -- | Compute a value once and then reuse it while computing all samples
 computeOnce :: (SamplingInfo -> a) -> Sound d (a -> b) -> Sound d b
@@ -413,8 +381,8 @@ computeOnce f = mapComputation $ mapDelayedResult $ \si ->
   let a = f si
    in M.map ($ a)
 
--- | Fill a sound with a vector of sound samples. Keep in mind that the vector has the appropriate length! 
-fillWholeSound :: M.Load r M.Ix1 Pulse => (SamplingInfo -> M.Vector r Pulse) -> Sound I Pulse
+-- | Fill a sound with a vector of sound samples. Keep in mind that the vector has the appropriate length!
+fillWholeSound :: (M.Load r M.Ix1 Pulse) => (SamplingInfo -> M.Vector r Pulse) -> Sound I Pulse
 fillWholeSound f = InfiniteSound $ fillSoundInMemoryIO $ \si dest -> do
   let vector = f si
   M.computeInto dest vector
@@ -425,7 +393,7 @@ fillWholeSoundST f = InfiniteSound $ fillSoundInMemoryIO $ fmap stToIO . f
 
 -- | Modify all samples of a sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
-modifyWholeSound :: (M.Load r M.Ix1 Pulse, M.Size r) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
+modifyWholeSound :: (M.Load r M.Ix1 Pulse) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
 modifyWholeSound f = mapComputation $ mapSoundFromMemory f
 
 -- | Modify all samples of a sound so that you can look into the past and future
