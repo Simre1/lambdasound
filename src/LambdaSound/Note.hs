@@ -1,3 +1,5 @@
+-- |
+-- This module has some functions to use sound notation concepts like semitones for pitch and quarternotes for duration
 module LambdaSound.Note where
 
 import LambdaSound.Sound
@@ -95,10 +97,11 @@ a7 = 36
 b7 = 38
 
 -- ** Notes
+
 -- | These are durations for the corresponding note lenghts
 -- assuming 60 bpm.
--- 
--- If you know that a sound has 60 bpm, you can easily scale to 
+--
+-- If you know that a sound has 60 bpm, you can easily scale to
 -- different bpm with 'scaleDuration':
 -- @
 -- scaleDuration (wantedBPM / 60) soundWith60BPM

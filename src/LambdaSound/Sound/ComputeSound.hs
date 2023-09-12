@@ -1,5 +1,3 @@
-{-# LANGUAGE ImpredicativeTypes #-}
-
 module LambdaSound.Sound.ComputeSound where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
@@ -13,7 +11,6 @@ import Foreign.Marshal (copyBytes)
 import Foreign.Storable (Storable (..))
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types
-import Control.Monad.ST
 
 
 makeDelayedResult :: (SamplingInfo -> Int -> a) -> ComputeSound a
@@ -53,7 +50,7 @@ mergeDelayedResult merge cs1 cs2 = ComputeSound $ \si memo -> do
   pure (DelayedResult $ merge' delayedResult1 delayedResult2, ComputationInfoMergeDelayedResult stableMerge ci1 ci2)
 {-# INLINE mergeDelayedResult #-}
 
-computeSequentially :: Float -> ComputeSound Pulse -> ComputeSound Pulse -> ComputeSound Pulse
+computeSequentially :: Percentage -> ComputeSound Pulse -> ComputeSound Pulse -> ComputeSound Pulse
 computeSequentially factor c1 c2 = ComputeSound $ \si memo -> do
   let splitIndex =
         round $
@@ -153,8 +150,8 @@ mapSoundFromMemory f cs = ComputeSound $ \si memo -> do
     )
 {-# INLINE mapSoundFromMemory #-}
 
-mapSoundFromMemoryST :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> ST M.RealWorld ()) -> ComputeSound Pulse -> ComputeSound Pulse
-mapSoundFromMemoryST f cs = ComputeSound $ \si memo -> do
+mapSoundFromMemoryIO:: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> IO ()) -> ComputeSound Pulse -> ComputeSound Pulse
+mapSoundFromMemoryIO f cs = ComputeSound $ \si memo -> do
   (writeSamples, ci) <- asWriteResult cs si memo
   stableF <- makeSomeStableName f
   pure
@@ -162,10 +159,21 @@ mapSoundFromMemoryST f cs = ComputeSound $ \si memo -> do
         wholeSoundMArray <- MU.unsafeMallocMArray (M.Sz1 si.samples)
         writeSamples wholeSoundMArray
         wholeSoundArray <- MU.unsafeFreeze M.Seq wholeSoundMArray
-        stToIO $ f wholeSoundArray dest,
+        f wholeSoundArray dest,
       ComputationInfoMapMemory stableF ci
     )
-{-# INLINE mapSoundFromMemoryST #-}
+{-# INLINE mapSoundFromMemoryIO #-}
+
+fillSoundInMemoryIO :: (SamplingInfo -> M.MVector M.RealWorld M.S Pulse -> IO ()) -> ComputeSound Pulse
+fillSoundInMemoryIO f = ComputeSound $ \si _ -> do
+  stableF <- makeSomeStableName f
+  let f' = f si
+  pure
+    ( WriteResult $ \dest -> do
+        f' dest,
+      ComputationInfoFillMemory stableF
+    )
+{-# INLINE fillSoundInMemoryIO #-}
 
 pulseSize :: Int
 pulseSize = sizeOf (undefined :: Pulse)
@@ -220,6 +228,7 @@ data ComputationInfo
   | ComputationInfoMapDelayedResult SomeStableName ComputationInfo
   | ComputationInfoMergeDelayedResult SomeStableName ComputationInfo ComputationInfo
   | ComputationInfoMapMemory SomeStableName ComputationInfo
+  | ComputationInfoFillMemory SomeStableName 
   | ComputationInfoChangeSamplingInfo SomeStableName ComputationInfo
   deriving (Eq, Generic, Show)
 

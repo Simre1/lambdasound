@@ -1,9 +1,9 @@
--- | This module implements IIR filter.
+-- | This module implements IIR filters.
 --
 -- See: http://shepazu.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
 module LambdaSound.Filter
   ( -- * Usage
-    IIRParams(..),
+    IIRParams (..),
     applyIIRFilter,
 
     -- * Design
@@ -13,12 +13,12 @@ module LambdaSound.Filter
   )
 where
 
+import Control.Monad (forM_)
 import Data.Coerce (coerce)
 import Data.Massiv.Array qualified as M
 import Data.Massiv.Array.Unsafe qualified as MU
-import LambdaSound.Sound
-import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
+import LambdaSound.Sound
 
 -- | IIRParams contains the filter coefficients for the forward and
 -- feedback computation
@@ -65,19 +65,16 @@ calcAQ _ 0 = 0
 calcAQ w0 q = sin w0 / (2 * q)
 
 applyIIRFilter :: (SamplingInfo -> IIRParams) -> Sound d Pulse -> Sound d Pulse
-applyIIRFilter makeParams sound =
-  case sound of
-    TimedSound d _ -> withSamplingInfoT d $ \si -> applyFilter (makeParams si) sound
-    InfiniteSound _ -> withSamplingInfoI $ \si -> applyFilter (makeParams si) sound
+applyIIRFilter makeParams sound = adoptDuration sound $ withSamplingInfo $ \si ->
+  applyFilter (makeParams si) sound
   where
     applyFilter :: IIRParams -> Sound d Pulse -> Sound d Pulse
     applyFilter (IIRParams feedforward feedback') =
       let (currentCoefficient, feedback) = (coerce $ M.defaultIndex 1 feedback' 0, M.tail feedback')
-      in modifyWholeSoundST $ \source dest -> do 
-        forM_ [0..pred (M.unSz $ M.sizeOfMArray dest)] $ \index -> do
-          
-          let sourceValues =  M.imap (\i v -> coerce v * M.defaultIndex 0 source (index - i)) feedforward
-          recursiveValues <- M.itraversePrim @M.S (\i v -> (coerce v *) . fromMaybe 0 <$> M.read dest (index - succ i)) feedback
-          
-          let currentValue = (M.sum sourceValues - M.sum recursiveValues) / currentCoefficient
-          MU.unsafeWrite dest index currentValue
+       in modifyWholeSoundST $ \source dest -> do
+            forM_ [0 .. pred (M.unSz $ M.sizeOfMArray dest)] $ \index -> do
+              let sourceValues = M.imap (\i v -> coerce v * M.defaultIndex 0 source (index - i)) feedforward
+              recursiveValues <- M.itraversePrim @M.S (\i v -> (coerce v *) . fromMaybe 0 <$> M.read dest (index - succ i)) feedback
+
+              let currentValue = (M.sum sourceValues - M.sum recursiveValues) / currentCoefficient
+              MU.unsafeWrite dest index currentValue

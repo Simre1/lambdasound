@@ -2,17 +2,19 @@ module LambdaSound.Samples where
 
 import Data.Coerce
 import Data.Fixed (mod')
-import Data.Vector.Storable qualified as V
-import Debug.Trace (traceShowId)
+import Data.Massiv.Array qualified as M
+import Data.Massiv.Array.Unsafe qualified as MU
 import LambdaSound.Sound
 import System.Random as R
 
 -- | Pure sinus sound
+--
 -- Warm and round
 sineWave :: Hz -> Sound I Pulse
 sineWave hz = (\t -> sin (coerce hz * coerce t * 2 * pi)) <$> time
 
 -- | Triangle wave
+--
 -- Similar to sine but colder
 triangleWave :: Hz -> Sound I Pulse
 triangleWave hz =
@@ -25,12 +27,14 @@ triangleWave hz =
     )
     time
 
--- | Produces a sawtooth wave
+-- | Sawtooth wave
+--
 -- Warm and sharp
 sawWave :: Hz -> Sound I Pulse
 sawWave hz = (\t -> (coerce hz * coerce t * 2) `mod'` 2 - 1) <$> time
 
 -- | Produces a square wave
+--
 -- Cold
 squareWave :: Hz -> Sound I Pulse
 squareWave hz = (\t -> fromIntegral @Int $ round ((coerce hz * t) `mod'` 1) * 2 - 1) <$> time
@@ -41,9 +45,10 @@ noise :: Int -> Sound I Pulse
 noise initial =
   computeOnce
     ( \sr ->
-        V.unfoldrExactN
-          sr.samples
-          (R.uniformR (-1, 1))
-          (mkStdGen initial)
+        M.compute @M.S $
+          M.unfoldrS_
+            (M.Sz1 sr.samples)
+            (R.uniformR (-1, 1))
+            (mkStdGen initial)
     )
-    (fmap Pulse . flip (V.!) <$> sampleIndex)
+    (fmap Pulse . flip MU.unsafeIndex <$> sampleIndex)

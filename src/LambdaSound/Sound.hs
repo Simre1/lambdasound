@@ -1,5 +1,5 @@
 module LambdaSound.Sound
-  ( -- ** Sound
+  ( -- ** Sound types
     Sound (..),
     SoundDuration (..),
     Pulse (..),
@@ -11,46 +11,68 @@ module LambdaSound.Sound
     Time (..),
     DetermineDuration,
 
-    -- ** Combinators
-    sequentially2,
+    -- ** Basic sounds
+    time,
+    progress,
+    sampleIndex,
+    constant,
+    silence,
+
+    -- ** Sounds in sequence
+    timedSequentially,
     (>>>),
     sequentially,
+    infiniteSequentially,
+
+    -- ** Sounds in parallel
     parallel2,
     parallel,
-    zipSoundWith,
+
+    -- ** Volume
     amplify,
     reduce,
+
+    -- ** Pitch
     raise,
     diminish,
+
+    -- ** Duration
     setDuration,
     (|->),
     getDuration,
     scaleDuration,
+    dropDuration,
+    adoptDuration,
+
+    -- ** Sample order
     reverseSound,
     dropSound,
     takeSound,
-    changeTempo,
-    changeTempoM,
-    withSamplingInfoI,
-    withSamplingInfoT,
+
+    -- ** Zipping
+    zipSoundWith,
+    zipSound,
 
     -- ** Convolution
     Kernel (..),
     convolve,
     convolveDuration,
+
+    -- ** Change play behavior of a sound
+    changeTempo,
+    changeTempoM,
+
+    -- ** Modify the samples of a sound
     modifyWholeSound,
     modifyWholeSoundST,
-
-    -- ** Making new sounds
-    time,
-    progress,
-    sampleIndex,
+    fillWholeSound,
+    fillWholeSoundST,
     computeOnce,
-    constant,
-    silence,
+    withSamplingInfo,
   )
 where
 
+import Control.Monad.ST
 import Data.Coerce (coerce)
 import Data.Foldable (foldl')
 import Data.Massiv.Array qualified as M
@@ -58,7 +80,6 @@ import Data.Massiv.Array.Unsafe qualified as MU
 import LambdaSound.Sound.ComputeSound
 import LambdaSound.Sound.Types
 import System.IO.Unsafe (unsafePerformIO)
-import Control.Monad.ST
 
 -- | Some 'Sound's have a different while others do not.
 -- 'I'nfinite 'Sound's have no duration.
@@ -81,18 +102,18 @@ data Sound (d :: SoundDuration) a where
     ComputeSound a ->
     Sound I a
 
-data SoundType d where
-  InfiniteSoundType :: SoundType I
-  TimedSoundType :: SoundType T
+-- data SoundType d where
+--   InfiniteSoundType :: SoundType I
+--   TimedSoundType :: SoundType T
 
-class DetermineSoundType d where
-  determineSoundType :: SoundType d
+-- class DetermineSoundType d where
+--   determineSoundType :: SoundType d
 
-instance DetermineSoundType I where
-  determineSoundType = InfiniteSoundType
+-- instance DetermineSoundType I where
+--   determineSoundType = InfiniteSoundType
 
-instance DetermineSoundType T where
-  determineSoundType = TimedSoundType
+-- instance DetermineSoundType T where
+--   determineSoundType = TimedSoundType
 
 getCS :: Sound d a -> ComputeSound a
 getCS (InfiniteSound cs) = cs
@@ -139,20 +160,27 @@ instance Applicative (Sound I) where
   (<*>) = zipSoundWith ($)
 
 -- | Append two sounds. This is only possible for sounds with a duration.
-sequentially2 :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
-sequentially2 (TimedSound d1 c1) (TimedSound d2 c2) =
+timedSequentially :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
+timedSequentially (TimedSound d1 c1) (TimedSound d2 c2) =
   TimedSound (d1 + d2) $
     computeSequentially (coerce $ d1 / (d1 + d2)) c1 c2
 
+infiniteSequentially :: Percentage -> Sound I Pulse -> Sound I Pulse -> Sound I Pulse
+infiniteSequentially factor' (InfiniteSound c1) (InfiniteSound c2) =
+  InfiniteSound $
+    computeSequentially factor c1 c2
+  where
+    factor = max 0 $ min 1 factor'
+
 -- | Same as 'sequentially2'
 (>>>) :: Sound T Pulse -> Sound T Pulse -> Sound T Pulse
-(>>>) = sequentially2
+(>>>) = timedSequentially
 
 infixl 5 >>>
 
 -- | Combine a list of sounds in a sequential manner.
 sequentially :: [Sound T Pulse] -> Sound T Pulse
-sequentially = foldl' sequentially2 mempty
+sequentially = foldl' timedSequentially mempty
 
 -- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'pulse')
 time :: Sound I Time
@@ -172,7 +200,8 @@ progress = InfiniteSound $ makeDelayedResult $ \si index ->
 sampleIndex :: Sound I Int
 sampleIndex = InfiniteSound $ makeDelayedResult (const id)
 
--- | Combine two sounds such that they play in parallel
+-- | Combine two sounds such that they play in parallel. If one 'Sound' is longer than the other,
+-- it will be played without the shorter one for its remaining time
 parallel2 :: Sound d Pulse -> Sound d Pulse -> Sound d Pulse
 parallel2 (InfiniteSound c1) (InfiniteSound c2) = InfiniteSound $ computeParallel c1 1 c2
 parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ computeParallel longerC (coerce factor) shorterC
@@ -208,6 +237,11 @@ zipSoundWith f sound1 sound2 =
     (InfiniteSound c1, TimedSound d c2) -> TimedSound d $ zipWithCompute f c1 c2
     (InfiniteSound c1, InfiniteSound c2) -> InfiniteSound $ zipWithCompute f c1 c2
 
+-- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
+-- to the duration of the shorter 'Sound', cutting away the excess samples from the longer one.
+zipSound :: Sound d1 (a -> b) -> Sound d2 a -> Sound (DetermineDuration d1 d2) b
+zipSound = zipSoundWith ($)
+
 -- | Amplifies the volume of the given 'Sound'
 amplify :: Float -> Sound d Pulse -> Sound d Pulse
 amplify x = fmap (* coerce x)
@@ -240,6 +274,14 @@ setDuration d (InfiniteSound c) = TimedSound (max d 0) c
 
 infix 7 |->
 
+-- | Drop the duration associated with a 'Sound' and get an infinite sound again
+-- If you have combined timed sounds with a sequence combinator and then drop
+-- their duration, the sounds will keep their proportional length to each other.
+-- The percentage of their play time stays the same.
+dropDuration :: Sound d a -> Sound I a
+dropDuration (InfiniteSound cs) = InfiniteSound cs
+dropDuration (TimedSound _ cs) = InfiniteSound cs
+
 -- | Scales the 'Duration' of a 'Sound'.
 -- The following makes a sound twice as long:
 -- > scaleDuration 2 sound
@@ -249,6 +291,11 @@ scaleDuration x (TimedSound d c) = TimedSound (coerce x * d) c
 -- | Get the duration of a 'T'imed 'Sound'
 getDuration :: Sound T a -> Duration
 getDuration (TimedSound d _) = d
+
+-- | Set the 'Duration' of a 'Sound' to the same as another one 'Sound'
+adoptDuration :: Sound d a -> Sound x b -> Sound d b
+adoptDuration (TimedSound duration _) = setDuration duration
+adoptDuration (InfiniteSound _) = dropDuration
 
 -- | Reverses a 'Sound' similar to 'reverse' for lists
 reverseSound :: Sound d a -> Sound d a
@@ -260,13 +307,13 @@ dropSound :: Duration -> Sound T a -> Sound T a
 dropSound dropD' (TimedSound originalD cs) =
   TimedSound (originalD - dropD) $
     withSamplingInfoCS $ \oldSI ->
-    changeSamplingInfo (\si -> si {samples = round $ factor * fromIntegral si.samples}) $
-      mapDelayedResult
-        ( \newSI ->
-            MU.unsafeBackpermute (M.Sz1 oldSI.samples) $ \index ->
-              index + newSI.samples - oldSI.samples
-        )
-        cs
+      changeSamplingInfo (\si -> si {samples = round $ factor * fromIntegral si.samples}) $
+        mapDelayedResult
+          ( \newSI ->
+              MU.unsafeBackpermute (M.Sz1 oldSI.samples) $ \index ->
+                index + newSI.samples - oldSI.samples
+          )
+          cs
   where
     dropD = max 0 $ min originalD dropD'
     droppedFactor = min 1 $ dropD / originalD
@@ -366,6 +413,16 @@ computeOnce f = mapComputation $ mapDelayedResult $ \si ->
   let a = f si
    in M.map ($ a)
 
+-- | Fill a sound with a vector of sound samples. Keep in mind that the vector has the appropriate length! 
+fillWholeSound :: M.Load r M.Ix1 Pulse => (SamplingInfo -> M.Vector r Pulse) -> Sound I Pulse
+fillWholeSound f = InfiniteSound $ fillSoundInMemoryIO $ \si dest -> do
+  let vector = f si
+  M.computeInto dest vector
+
+-- | Fill a sound with a vector of sound samples in a mutable fashion.
+fillWholeSoundST :: (SamplingInfo -> M.MVector M.RealWorld M.S Pulse -> ST M.RealWorld ()) -> Sound I Pulse
+fillWholeSoundST f = InfiniteSound $ fillSoundInMemoryIO $ fmap stToIO . f
+
 -- | Modify all samples of a sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
 modifyWholeSound :: (M.Load r M.Ix1 Pulse, M.Size r) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> Sound d Pulse -> Sound d Pulse
@@ -373,14 +430,9 @@ modifyWholeSound f = mapComputation $ mapSoundFromMemory f
 
 -- | Modify all samples of a sound so that you can look into the past and future
 -- of a sound (e.g. IIR filter).
-modifyWholeSoundST :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse  -> ST M.RealWorld ()) -> Sound d Pulse -> Sound d Pulse
-modifyWholeSoundST f = mapComputation $ mapSoundFromMemoryST f
+modifyWholeSoundST :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> ST M.RealWorld ()) -> Sound d Pulse -> Sound d Pulse
+modifyWholeSoundST f = mapComputation $ mapSoundFromMemoryIO $ fmap stToIO . f
 
 -- | Access the sample rate of an infinite sound
-withSamplingInfoI :: (SamplingInfo -> Sound I a) -> Sound I a
-withSamplingInfoI f = InfiniteSound $ withSamplingInfoCS (getCS . f)
-
--- | Access the sample rate of a timed sound. You also need to specify the
--- 'Duration' of the sound.
-withSamplingInfoT :: Duration -> (SamplingInfo -> Sound T a) -> Sound T a
-withSamplingInfoT duration f = TimedSound duration $ withSamplingInfoCS (getCS . f)
+withSamplingInfo :: (SamplingInfo -> Sound d a) -> Sound I a
+withSamplingInfo f = InfiniteSound $ withSamplingInfoCS (getCS . f)
