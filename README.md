@@ -52,7 +52,7 @@ main = do
   play sampleRate volume ascending
 ```
 
-You can also take a look at `example/Main.hs` for a bigger example and play it with `cabal run example`.
+You can also take a look at `example/Example1.hs` and `example/Example2.hs` for bigger examples and play them with `cabal run example1` and `cabal run example2`.
 
 ## Feature Overview
 

@@ -1,14 +1,11 @@
 cabal-version:      3.0
 name:               lambdasound
-version:            0.1.0.0
+version:            1.0.0
 synopsis:           A libary for generating low-level sounds with high-level combinators
 description:        'lambdasound' can generate all kinds of sounds, play them and save them as wav or pcm data.
-                    Sound can be manipulated in both a low and high-level way. On the one hand, it is possible to 
-                    generate sound as a series of floats. On the other hand, there exist various combinators for sound
-                    to facilitate sequential and parallel playing of sounds or to change the duration of a sound.
-                    == SDL2 needed
-                    'lambdasound' uses [proteaaudio-sdl](https://hackage.haskell.org/package/proteaaudio-sdl) for playing sounds.
-                    That's why you will need to install 'SDL2'.
+                    Sound can be manipulated in both a low and high-level way. It is possible to 
+                    operate on the samples of a sound. However, there are also higher-level combinators 
+                    for various tasks, e.g. to facilitate sequential and parallel playing of sounds or to change the duration of a sound.
 license:            MIT
 license-file:       LICENSE
 author:             Simon Reitinger
@@ -75,9 +72,20 @@ library
     default-language: GHC2021
     ghc-options: -O2
 
-executable example
+executable example1
     import:           warnings
-    main-is:          Main.hs
+    main-is:          Example1.hs
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound
+    default-extensions:
+        DataKinds
+    hs-source-dirs:   example
+    default-language: GHC2021
+
+executable example2
+    import:           warnings
+    main-is:          Example2.hs
     build-depends:
         base ^>=4.17.0.0,
         lambdasound
