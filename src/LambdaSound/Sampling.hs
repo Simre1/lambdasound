@@ -1,17 +1,18 @@
 module LambdaSound.Sampling (sampleSound, sampleSoundRaw, saveWav, saveRawPCM) where
 
 import Codec.Audio.Wave
-import Data.ByteString.Builder qualified as B
-import Data.Coerce
+import Data.ByteString qualified as B
 import Data.Massiv.Array qualified as M
 import LambdaSound.Sound
-import LambdaSound.Sound.MSC (sampleMSC, makeSamplingInfo)
+import LambdaSound.Sound.ComputeSound (sampleComputeSound)
+import LambdaSound.Sound.Types (makeSamplingInfo)
+import Data.Vector.Storable.ByteString (vectorToByteString)
 
 -- | Samples a sound with the given frequency (usually 44100 is good) without post-processing
 sampleSoundRaw :: Hz -> Sound T Pulse -> IO (M.Vector M.S Pulse)
 sampleSoundRaw hz (TimedSound duration msc) = do
   let sr = makeSamplingInfo hz duration
-  sampleMSC sr msc
+  sampleComputeSound sr msc
 
 -- | Samples a sound with the given frequency (usually 44100 is good) with post-processing
 --
@@ -26,7 +27,7 @@ postProcess = compressDynamically
 -- | Save the sound as raw floats
 saveRawPCM :: FilePath -> M.Vector M.S Pulse -> IO ()
 saveRawPCM filePath floats =
-  B.writeFile filePath $ M.foldMono (B.floatLE . coerce) floats
+  B.writeFile filePath $ vectorToByteString $ M.toStorableVector floats
 
 -- | Apply dynamic compression on a vector of samples such that
 -- they are constrained within (-1, 1). Quieter sounds are boosted
@@ -58,4 +59,4 @@ saveWav filepath sampleRate floats = do
             waveOtherChunks = []
           }
   writeWaveFile filepath wave $ \handle ->
-    B.hPutBuilder handle $ M.foldMono (B.floatLE . coerce) floats
+    B.hPut handle $ vectorToByteString $ M.toStorableVector floats

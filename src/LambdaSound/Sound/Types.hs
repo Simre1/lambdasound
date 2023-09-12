@@ -4,6 +4,7 @@ import Control.DeepSeq (NFData)
 import Data.Hashable (Hashable)
 import Foreign.Storable (Storable)
 import GHC.Generics (Generic)
+import Data.Coerce (coerce)
 
 -- | An audio sample
 newtype Pulse = Pulse Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Real, RealFrac, NFData, Storable, Hashable, Enum)
@@ -28,11 +29,16 @@ newtype Time = Time Float deriving (Show, Eq, Floating, Num, Fractional, Ord, Re
 -- | Gives information about how many samples are needed during computation
 data SamplingInfo = SamplingInfo
   { period :: !Float,
-    samples :: !Int,
-    sampleRate :: Hz
+    sampleRate :: Hz,
+    samples :: Int
   }
   deriving (Generic, Show, Eq)
 
 instance Hashable Hz
 
 instance Hashable SamplingInfo where
+
+makeSamplingInfo :: Hz -> Duration -> SamplingInfo
+makeSamplingInfo hz duration =
+  let period = coerce $ 1 / hz
+   in SamplingInfo period hz (round $ coerce duration / period)

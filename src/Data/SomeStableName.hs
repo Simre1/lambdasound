@@ -15,3 +15,6 @@ instance Hashable SomeStableName where
 
 makeSomeStableName :: MonadIO m => a -> m SomeStableName
 makeSomeStableName = liftIO . fmap SomeStableName . makeStableName
+
+instance Show SomeStableName where
+  show (SomeStableName sn) = "SomeStableName (" ++ show (hashStableName sn) ++ ")"

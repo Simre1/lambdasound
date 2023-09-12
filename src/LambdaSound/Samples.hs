@@ -3,16 +3,14 @@ module LambdaSound.Samples where
 import Data.Coerce
 import Data.Fixed (mod')
 import Data.Vector.Storable qualified as V
+import Debug.Trace (traceShowId)
 import LambdaSound.Sound
 import System.Random as R
-import Debug.Trace (traceShowId)
-
 
 -- | Pure sinus sound
 -- Warm and round
 sineWave :: Hz -> Sound I Pulse
 sineWave hz = (\t -> sin (coerce hz * coerce t * 2 * pi)) <$> time
-
 
 -- | Triangle wave
 -- Similar to sine but colder
@@ -49,4 +47,3 @@ noise initial =
           (mkStdGen initial)
     )
     (fmap Pulse . flip (V.!) <$> sampleIndex)
-

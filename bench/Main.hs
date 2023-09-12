@@ -15,7 +15,11 @@ main =
           bench "Noise" $ nfSound noiseSound,
           bench "Convolution" $ nfSound convolutionSound,
           bench "Long Sound" $ nfSound longSound,
-          bench "Filtered sound" $ nfSound filteredSound
+          bench "Filtered sound" $ nfSound filteredSound,
+          bench "Dropped sound" $ nfSound droppedSound,
+          bench "Taken sound" $ nfSound takenSound,
+          bench "Cached sound" $ nfSound cachedSound,
+          bench "Timed parallel sound" $ nfSound timedParallelSound
         ]
     ]
 
@@ -29,7 +33,7 @@ simpleHarmonic :: Sound T Pulse
 simpleHarmonic = 3 |-> harmonic sineWave 440
 
 someSounds :: Sound T Pulse
-someSounds =  
+someSounds =
   sequentially
     [ 1 |-> parallel [harmonic sineWave 440, harmonic sineWave 500, harmonic sineWave 1000],
       1 |-> harmonic sineWave 200,
@@ -55,3 +59,23 @@ convolutionSound =
 
 longSound :: Sound T Pulse
 longSound = repeatSound 20 someSounds
+
+droppedSound :: Sound T Pulse
+droppedSound = repeatSound 10 $ dropSound 0.5 someSounds
+
+takenSound :: Sound T Pulse
+takenSound = repeatSound 10 $ takeSound 2.5 someSounds
+
+cachedSound :: Sound T Pulse
+cachedSound = cache longSound
+
+timedParallelSound :: Sound T Pulse
+timedParallelSound =
+  parallel $ mconcat $
+    replicate 5 [ 0.5 |-> simplePulse,
+      1 |-> simplePulse,
+      1.5 |-> simplePulse,
+      0.7 |-> simplePulse,
+      2 |-> simplePulse,
+      1.5 |-> simplePulse
+    ]

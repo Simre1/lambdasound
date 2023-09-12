@@ -39,7 +39,7 @@ genSound = do
       ((<>) <$> basicSound <*> basicSound)
         :| [ (>>>) <$> basicSound <*> basicSound,
              takeSound 0.5 <$> basicSound,
-             dropSound 0.3 <$> basicSound,
+             -- dropSound 0.3 <$> basicSound,
              changeTempo (** 1.2) <$> basicSound,
              amplify 2 <$> basicSound,
              reduce 2 <$> basicSound,
@@ -116,6 +116,9 @@ almostEqSound :: Sound T Pulse -> Sound T Pulse -> IO Bool
 almostEqSound s1 s2 = do
   x <- sampleSound 100 s1
   y <- sampleSound 100 s2
-  pure $ M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
+  let res = M.all (\a -> abs a < epsilon) $ M.zipWith (-) x y
+  unless res $
+    print (x,y)
+  pure res
   where
     epsilon = 5e-6

@@ -30,15 +30,12 @@ library
         LambdaSound.Sampling,
         LambdaSound.Filter
     other-modules:
-        LambdaSound.Sound.MSC,
         LambdaSound.Sound.ComputeSound,
         LambdaSound.Sound.Types,
         Data.SomeStableName
     -- other-extensions:
     build-depends:    
         base ^>=4.17.0.0,
-        containers,
-        typed-process,
         bytestring,
         vector,
         directory,
@@ -52,7 +49,6 @@ library
         bytestring-to-vector,
         deepseq,
         transformers,
-        unordered-containers,
         hashable,
         hashtables,
         text,
