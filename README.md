@@ -66,6 +66,7 @@ You can also take a look at `example/Main.hs` for a bigger example and play it w
 - [x] take/drop for sounds
 - [x] More Semitones
 - [x] Caching
+- [x] IIR filters
 
 ## Building
 

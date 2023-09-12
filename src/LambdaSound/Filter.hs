@@ -23,8 +23,8 @@ import Data.Maybe (fromMaybe)
 -- | IIRParams contains the filter coefficients for the forward and
 -- feedback computation
 data IIRParams = IIRParams
-  { feedforward :: {-# UNPACK #-} !(M.Vector M.S Float),
-    feedback :: {-# UNPACK #-} !(M.Vector M.S Float)
+  { feedforward :: !(M.Vector M.S Float),
+    feedback :: !(M.Vector M.S Float)
   }
   deriving (Show)
 
@@ -38,6 +38,7 @@ lowPassFilter freq q si =
     a = calcAQ w0 q
     scaledFreq = freq / (si.sampleRate * coerce (si.period))
 
+-- | A high-pass filter using cutoff frequency and resonance.
 highPassFilter :: Hz -> Float -> SamplingInfo -> IIRParams
 highPassFilter freq q si =
   IIRParams (M.fromList M.Seq [b0, -1 - cos w0, b0]) (M.fromList M.Seq [1 + a, -2 * cos w0, 1 - a])
@@ -47,6 +48,7 @@ highPassFilter freq q si =
     a = calcAQ w0 q
     scaledFreq = freq / (si.sampleRate * coerce (si.period))
 
+-- | A band pass filter using cutoff frequency and resonance.
 bandPassFilter :: Hz -> Float -> SamplingInfo -> IIRParams
 bandPassFilter freq q si =
   IIRParams (M.fromList M.Seq [a, 0, -1 * a]) (M.fromList M.Seq [1 + a, -2 * cos w0, 1 - a])
