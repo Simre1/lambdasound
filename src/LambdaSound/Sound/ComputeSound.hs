@@ -12,12 +12,16 @@ import Foreign.Storable (Storable (..))
 import GHC.Generics (Generic)
 import LambdaSound.Sound.Types
 
+makeWithIndexFunction :: (SamplingInfo -> Int -> a) -> ComputeSound a
+makeWithIndexFunction f = makeDelayedResult $ \si ->
+  let f' = f si
+   in M.makeArray M.Seq (M.Sz1 si.samples) f'
+{-# INLINE makeWithIndexFunction #-}
 
-makeDelayedResult :: (SamplingInfo -> Int -> a) -> ComputeSound a
+makeDelayedResult :: (SamplingInfo -> M.Vector M.D a) -> ComputeSound a
 makeDelayedResult f = ComputeSound $ \si _ -> do
   stableF <- makeSomeStableName f
-  let f' = f si
-  pure (DelayedResult $ M.makeArray M.Seq (M.Sz1 si.samples) f', ComputationInfoMakeDelayedResult stableF)
+  pure (DelayedResult $ f si, ComputationInfoMakeDelayedResult stableF)
 {-# INLINE makeDelayedResult #-}
 
 changeSamplingInfo :: (SamplingInfo -> SamplingInfo) -> ComputeSound a -> ComputeSound a
@@ -95,7 +99,6 @@ asDelayedResult (ComputeSound compute) si memo = do
   case result of
     DelayedResult vector -> pure (vector, ci)
     WriteResult writeResult -> do
-
       marray <- MU.unsafeMallocMArray (M.Sz1 si.samples)
       writeResult marray
       array <- MU.unsafeFreeze M.Seq marray
@@ -150,7 +153,7 @@ mapSoundFromMemory f cs = ComputeSound $ \si memo -> do
     )
 {-# INLINE mapSoundFromMemory #-}
 
-mapSoundFromMemoryIO:: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> IO ()) -> ComputeSound Pulse -> ComputeSound Pulse
+mapSoundFromMemoryIO :: (M.Vector M.S Pulse -> M.MVector M.RealWorld M.S Pulse -> IO ()) -> ComputeSound Pulse -> ComputeSound Pulse
 mapSoundFromMemoryIO f cs = ComputeSound $ \si memo -> do
   (writeSamples, ci) <- asWriteResult cs si memo
   stableF <- makeSomeStableName f
@@ -228,7 +231,7 @@ data ComputationInfo
   | ComputationInfoMapDelayedResult SomeStableName ComputationInfo
   | ComputationInfoMergeDelayedResult SomeStableName ComputationInfo ComputationInfo
   | ComputationInfoMapMemory SomeStableName ComputationInfo
-  | ComputationInfoFillMemory SomeStableName 
+  | ComputationInfoFillMemory SomeStableName
   | ComputationInfoChangeSamplingInfo SomeStableName ComputationInfo
   deriving (Eq, Generic, Show)
 

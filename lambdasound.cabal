@@ -39,6 +39,7 @@ library
         LambdaSound.Cache,
         LambdaSound.Plot,
         LambdaSound.Sampling,
+        LambdaSound.Create,
         LambdaSound.Convolution,
         LambdaSound.Filter
     other-modules:

@@ -13,12 +13,13 @@ module LambdaSound.Sound
     Time (..),
     DetermineDuration,
 
-    -- ** Basic sounds
-    time,
-    progress,
-    sampleIndex,
-    constant,
-    silence,
+    -- ** Make new sounds
+    -- Also take a look at @LambdaSound.Create@!
+    makeSound,
+    makeSoundVector,
+    fillWholeSound,
+    fillWholeSoundST,
+    computeOnce,
 
     -- ** Sounds in sequence
     timedSequentially,
@@ -55,7 +56,6 @@ module LambdaSound.Sound
     zipSoundWith,
     zipSound,
 
-
     -- ** Change play behavior of a sound
     changeTempo,
     changeTempoM,
@@ -63,9 +63,6 @@ module LambdaSound.Sound
     -- ** Modify the samples of a sound
     modifyWholeSound,
     modifyWholeSoundST,
-    fillWholeSound,
-    fillWholeSoundST,
-    computeOnce,
     withSamplingInfo,
   )
 where
@@ -136,17 +133,17 @@ instance Semigroup (Sound d Pulse) where
   (<>) = parallel2
 
 instance Monoid (Sound I Pulse) where
-  mempty = silence
+  mempty = pure 0
 
 instance Monoid (Sound T Pulse) where
-  mempty = TimedSound 0 $ makeDelayedResult $ const $ const 0
+  mempty = TimedSound 0 $ makeWithIndexFunction $ const $ const 0
 
 instance (Num a) => Num (Sound I a) where
   (+) = zipSoundWith (+)
   (*) = zipSoundWith (*)
   (-) = zipSoundWith (-)
   abs = fmap abs
-  fromInteger x = constant $ fromInteger x
+  fromInteger x = makeSound $ \_ _ -> fromInteger x
   signum = fmap signum
   negate = fmap negate
 
@@ -154,7 +151,7 @@ instance Functor (Sound d) where
   fmap f = mapComputation $ mapComputeSound f
 
 instance Applicative (Sound I) where
-  pure = constant
+  pure a = makeSound $ \_ _ -> a
   (<*>) = zipSoundWith ($)
 
 -- | Append two sounds. This is only possible for sounds with a duration.
@@ -182,24 +179,6 @@ infixl 5 >>>
 sequentially :: [Sound T Pulse] -> Sound T Pulse
 sequentially = foldl' timedSequentially mempty
 
--- | Get the time for each sample which can be used for sinus wave calculations (e.g. 'sineWave')
-time :: Sound I Time
-time = InfiniteSound $ do
-  makeDelayedResult $ \si index ->
-    coerce $ fromIntegral index * si.period
-
--- | Get the 'Progress' of a 'Sound'.
--- 'Progress' of '0' means that the sound has just started.
--- 'Progress' of '1' means that the sound has finished.
--- 'Progress' greater than '1' or smaller than '0' is invalid.
-progress :: Sound I Progress
-progress = InfiniteSound $ makeDelayedResult $ \si index ->
-  fromIntegral index / fromIntegral si.samples
-
--- | Tells you the sample index for each sample
-sampleIndex :: Sound I Int
-sampleIndex = InfiniteSound $ makeDelayedResult (const id)
-
 -- | Combine two sounds such that they play in parallel. If one 'Sound' is longer than the other,
 -- it will be played without the shorter one for its remaining time
 parallel2 :: Sound d Pulse -> Sound d Pulse -> Sound d Pulse
@@ -215,14 +194,6 @@ parallel2 (TimedSound d1 c1) (TimedSound d2 c2) = TimedSound newDuration $ compu
 -- | Combine a lists of sounds such that they play in parallel
 parallel :: (Monoid (Sound d Pulse)) => [Sound d Pulse] -> Sound d Pulse
 parallel = foldl' parallel2 mempty
-
--- | A 'Sound' with @0@ volume
-silence :: Sound I Pulse
-silence = constant 0
-
--- | A constant 'Sound'
-constant :: a -> Sound I a
-constant a = InfiniteSound $ makeDelayedResult $ const (const a)
 
 -- | Zip two 'Sound's. The duration of the resulting 'Sound' is equivalent
 -- to the duration of the shorter 'Sound', cutting away the excess samples from the longer one.
@@ -374,7 +345,6 @@ changeTempoM (InfiniteSound msc1) =
       )
       msc1
 
-
 -- | Compute a value once and then reuse it while computing all samples
 computeOnce :: (SamplingInfo -> a) -> Sound d (a -> b) -> Sound d b
 computeOnce f = mapComputation $ mapDelayedResult $ \si ->
@@ -404,3 +374,13 @@ modifyWholeSoundST f = mapComputation $ mapSoundFromMemoryIO $ fmap stToIO . f
 -- | Access the sample rate of an infinite sound
 withSamplingInfo :: (SamplingInfo -> Sound d a) -> Sound I a
 withSamplingInfo f = InfiniteSound $ withSamplingInfoCS (getCS . f)
+
+-- | Calculate sound samples based on their index.
+-- Take a look at @LambdaSound.Create@ for other creation functions.
+makeSound :: (SamplingInfo -> Int -> a) -> Sound I a
+makeSound f = InfiniteSound $ makeWithIndexFunction f
+
+-- | Calculate the samples of the sound as one vector
+-- Take a look at @LambdaSound.Create@ for other creation functions.
+makeSoundVector :: (SamplingInfo -> M.Vector M.D a) -> Sound I a
+makeSoundVector f = InfiniteSound $ makeDelayedResult f

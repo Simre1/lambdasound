@@ -1,6 +1,7 @@
 module LambdaSound.Effect where
 
 import Data.Coerce
+import LambdaSound.Create
 import LambdaSound.Sound
 
 -- | Eases the volume of the sound. The given 'Int' controls the strength of the easing.
@@ -10,7 +11,7 @@ easeInOut strength = zipSoundWith (\p -> (f p *)) progress
     f p = coerce $ -(2 * p - 1) ** (abs (fromIntegral strength) * 2) + 1
 
 -- | Repeats a sound such that:
--- 
+--
 -- > repeatSound 3 sound = sound >>> sound >>> sound
 repeatSound :: Int -> Sound T Pulse -> Sound T Pulse
 repeatSound n s
@@ -23,8 +24,8 @@ repeatSound n s
 
 -- | Plays the sound multiple times to get a simple reverb effect. The duration specifies the length of the reverb.
 simpleReverb :: Duration -> Sound T Pulse -> Sound T Pulse
-simpleReverb duration sound = flip foldMap (zip [1..] [0,(duration / 4)..duration]) $ \(v,d) ->
-  reduce v (setDuration d silence >>> sound) 
+simpleReverb duration sound = flip foldMap (zip [1 ..] [0, (duration / 4) .. duration]) $ \(v, d) ->
+  reduce v (setDuration d silence >>> sound)
 
 -- | ADSR envelope which specifies how the volume of a sound should behave over time
 data Envelope = Envelope

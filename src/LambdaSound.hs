@@ -8,17 +8,21 @@ module LambdaSound
   ( -- * Sounds
     module Sound,
 
-    -- * Notes
-    module Note,
+    -- * Create sounds
+    module Create,
 
     -- * Play sounds
     module Play,
+
+    -- * Notes
+    module Note,
 
     -- * Effects
     module Effect,
 
     -- * Convolution
     module Convolution,
+
     -- * Sound samples
     module Sample,
 
@@ -37,12 +41,13 @@ module LambdaSound
 where
 
 import LambdaSound.Cache as Cache
+import LambdaSound.Convolution as Convolution
+import LambdaSound.Create as Create
 import LambdaSound.Effect as Effect
+import LambdaSound.Filter as Filter
 import LambdaSound.Note as Note
 import LambdaSound.Play as Play
 import LambdaSound.Plot as Plot
 import LambdaSound.Samples as Sample
 import LambdaSound.Sampling as Sampling
 import LambdaSound.Sound as Sound
-import LambdaSound.Convolution as Convolution
-import LambdaSound.Filter as Filter

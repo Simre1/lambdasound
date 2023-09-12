@@ -19,7 +19,9 @@ main =
           bench "Dropped sound" $ nfSound droppedSound,
           bench "Taken sound" $ nfSound takenSound,
           bench "Cached sound" $ nfSound cachedSound,
-          bench "Timed parallel sound" $ nfSound timedParallelSound
+          bench "Timed parallel sound" $ nfSound timedParallelSound,
+          bench "Unfold pulse" $ nfSound unfoldPulse,
+          bench "Unfold normally" $ nfSound unfoldNormally
         ]
     ]
 
@@ -79,3 +81,9 @@ timedParallelSound =
       2 |-> simplePulse,
       1.5 |-> simplePulse
     ]
+
+unfoldPulse :: Sound T Pulse
+unfoldPulse = 5 |-> unfoldlSoundPulse (\s -> (s, succ s)) 0
+
+unfoldNormally :: Sound T Pulse
+unfoldNormally = 5 |-> unfoldlSound (\s -> (s, succ s)) 0

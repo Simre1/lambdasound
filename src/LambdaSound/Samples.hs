@@ -8,6 +8,7 @@ import Data.Massiv.Array qualified as M
 import Data.Massiv.Array.Unsafe qualified as MU
 import LambdaSound.Sound
 import System.Random as R
+import LambdaSound.Create
 
 -- | Pure sinus sound
 --

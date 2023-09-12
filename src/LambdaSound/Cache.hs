@@ -39,7 +39,7 @@ cacheComputation cs = ComputeSound $ \si memo -> do
     then do
       file <- liftIO $ BL.readFile filePath
       let floats = byteStringToVector $ toStrict $ decompress file
-          (ComputeSound compute) = makeDelayedResult @Pulse (\_ index -> floats V.! index)
+          (ComputeSound compute) = makeWithIndexFunction @Pulse (\_ index -> floats V.! index)
       compute si memo
     else 
     do
