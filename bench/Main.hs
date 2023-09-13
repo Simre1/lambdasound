@@ -3,6 +3,7 @@ module Main where
 import Data.Coerce
 import LambdaSound
 import Test.Tasty.Bench
+import qualified Data.Massiv.Array as M
 
 main :: IO ()
 main =
@@ -21,7 +22,9 @@ main =
           bench "Cached sound" $ nfSound cachedSound,
           bench "Timed parallel sound" $ nfSound timedParallelSound,
           bench "Unfold pulse" $ nfSound unfoldPulse,
-          bench "Unfold normally" $ nfSound unfoldNormally
+          bench "Unfold normally" $ nfSound unfoldNormally,
+          bench "With sampled sound" $ nfSound useSampledSound,
+          bench "Repeated with sampled sound" $ nfSound repeatedSampledSound
         ]
     ]
 
@@ -73,17 +76,27 @@ cachedSound = cache longSound
 
 timedParallelSound :: Sound T Pulse
 timedParallelSound =
-  parallel $ mconcat $
-    replicate 5 [ 0.5 |-> simplePulse,
-      1 |-> simplePulse,
-      1.5 |-> simplePulse,
-      0.7 |-> simplePulse,
-      2 |-> simplePulse,
-      1.5 |-> simplePulse
-    ]
+  parallel $
+    mconcat $
+      replicate
+        5
+        [ 0.5 |-> simplePulse,
+          1 |-> simplePulse,
+          1.5 |-> simplePulse,
+          0.7 |-> simplePulse,
+          2 |-> simplePulse,
+          1.5 |-> simplePulse
+        ]
 
 unfoldPulse :: Sound T Pulse
 unfoldPulse = 5 |-> unfoldlSoundPulse (\s -> (s, succ s)) 0
 
 unfoldNormally :: Sound T Pulse
 unfoldNormally = 5 |-> unfoldlSound (\s -> (s, succ s)) 0
+
+useSampledSound :: Sound T Pulse
+useSampledSound = setDuration 5 $ withSampledSoundPulse simplePulse $ \samples ->
+  makeSound $ \_ index -> samples M.! (index `mod` M.unSz (M.size samples))
+
+repeatedSampledSound :: Sound T Pulse
+repeatedSampledSound = repeatSound 20 useSampledSound

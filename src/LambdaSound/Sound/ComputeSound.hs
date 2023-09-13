@@ -45,6 +45,29 @@ withSamplingInfoCS f = ComputeSound $ \si memo ->
    in compute si memo
 {-# INLINE withSamplingInfoCS #-}
 
+withSampledSoundPulseCS :: Duration -> ComputeSound Pulse -> (M.Vector M.S Pulse -> ComputeSound a) -> ComputeSound a
+withSampledSoundPulseCS duration cs f = ComputeSound $ \si memo -> do
+  let sampleSI = makeSamplingInfo si.sampleRate duration
+  (writeSamples, ci) <- asWriteResult cs sampleSI memo
+  dest <- MU.unsafeMallocMArray (M.Sz1 sampleSI.samples)
+  writeSamples dest
+  samples <- MU.unsafeFreeze M.Seq dest
+  let (ComputeSound compute) = f samples
+  (res, _) <- compute si memo
+  stableF <- makeSomeStableName f
+  pure (res, ComputationInfoWithSampledSound stableF ci)
+{-# INLINE withSampledSoundPulseCS #-}
+
+withSampledSoundCS :: Duration -> ComputeSound a -> (M.Vector M.D a -> ComputeSound b) -> ComputeSound b
+withSampledSoundCS duration cs f = ComputeSound $ \si memo -> do
+  let sampleSI = makeSamplingInfo si.sampleRate duration
+  (delayedVector, ci) <- asDelayedResult cs sampleSI memo
+  let (ComputeSound compute) = f delayedVector
+  (res, _) <- compute si memo
+  stableF <- makeSomeStableName f
+  pure (res, ComputationInfoWithSampledSound stableF ci)
+{-# INLINE withSampledSoundCS #-}
+
 mergeDelayedResult :: (SamplingInfo -> M.Vector M.D a -> M.Vector M.D b -> M.Vector M.D c) -> ComputeSound a -> ComputeSound b -> ComputeSound c
 mergeDelayedResult merge cs1 cs2 = ComputeSound $ \si memo -> do
   stableMerge <- makeSomeStableName merge
@@ -233,6 +256,7 @@ data ComputationInfo
   | ComputationInfoMapMemory SomeStableName ComputationInfo
   | ComputationInfoFillMemory SomeStableName
   | ComputationInfoChangeSamplingInfo SomeStableName ComputationInfo
+  | ComputationInfoWithSampledSound  SomeStableName ComputationInfo
   deriving (Eq, Generic, Show)
 
 instance Hashable ComputationInfo

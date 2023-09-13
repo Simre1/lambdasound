@@ -135,7 +135,7 @@ benchmark lambdasound-bench
         lambdasound,
         tasty >= 1.4 && < 1.5,
         tasty-bench >= 0.3.5 && < 0.4,
-        vector >= 0.13.0 && < 0.14
+        massiv
     ghc-options: -O2
 
 source-repository head

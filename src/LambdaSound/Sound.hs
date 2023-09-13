@@ -64,7 +64,11 @@ module LambdaSound.Sound
     -- * Modify the samples of a sound
     modifyWholeSound,
     modifyWholeSoundST,
+
+    -- * Access the samples of a sound
     withSamplingInfo,
+    withSampledSound,
+    withSampledSoundPulse,
   )
 where
 
@@ -375,6 +379,16 @@ modifyWholeSoundST f = mapComputation $ mapSoundFromMemoryIO $ fmap stToIO . f
 -- | Access the sample rate of an infinite sound
 withSamplingInfo :: (SamplingInfo -> Sound d a) -> Sound I a
 withSamplingInfo f = InfiniteSound $ withSamplingInfoCS (getCS . f)
+
+-- | Access the samples of a sound.
+--
+-- The pulse version is slightly faster since you get a storable vector
+withSampledSoundPulse :: Sound T Pulse -> (M.Vector M.S Pulse -> Sound I a) -> Sound I a
+withSampledSoundPulse (TimedSound duration cs) = InfiniteSound . withSampledSoundPulseCS duration cs . fmap getCS
+
+-- | Access the samples of a sound.
+withSampledSound :: Sound T a -> (M.Vector M.D a -> Sound I b) -> Sound I b
+withSampledSound (TimedSound duration cs) = InfiniteSound . withSampledSoundCS duration cs . fmap getCS
 
 -- | Calculate sound samples based on their index.
 -- Take a look at @LambdaSound.Create@ for other creation functions.
