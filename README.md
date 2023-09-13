@@ -52,7 +52,12 @@ main = do
   play sampleRate volume ascending
 ```
 
-You can also take a look at `example/Example1.hs` and `example/Example2.hs` for bigger examples and play them with `cabal run example1` and `cabal run example2`.
+You can also take a look at `example/Example1.hs` and `example/Example2.hs` for bigger examples and play them with:
+
+```haskell
+cabal run example1
+cabal run example2
+```
 
 ## Feature Overview
 
@@ -80,8 +85,10 @@ cabal build lambdasound
 ```
 
 You can run the example with:
-```
-cabal run example
+
+```haskell
+cabal run example1
+cabal run example2
 ```
 
 For this library, you will need to have **SDL2** installed. Take a look at [proteeaudio-sdl](https://hackage.haskell.org/package/proteaaudio-sdl) for installation instructions.
