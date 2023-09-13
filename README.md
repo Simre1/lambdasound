@@ -72,7 +72,7 @@ You can also take a look at `example/Example1.hs` and `example/Example2.hs` for 
 
 ## Building
 
-`lambdasound` can be built as usual with the `cabal` package manager. For playing sounds, you will need to have **SDL2** installed.
+`lambdasound` can be built as usual with the `cabal` package manager. 
 
 ```
 git clone https://github.com/Simre1/lambdasound
@@ -83,6 +83,9 @@ You can run the example with:
 ```
 cabal run example
 ```
+
+For this library, you will need to have **SDL2** installed. Take a look at [proteeaudio-sdl](https://hackage.haskell.org/package/proteaaudio-sdl) for installation instructions.
+
 
 ## Contributing
 
