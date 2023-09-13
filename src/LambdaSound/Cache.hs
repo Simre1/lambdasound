@@ -17,10 +17,10 @@ import System.Directory
 import System.FilePath (joinPath)
 
 -- | Caches a sound. If the sound is cached, then
--- the sound gets read from the XDG data directory and does not have to
+-- the sound gets read from the XDG cache directory and does not have to
 -- be computed again.
--- It might load a cached sound which is not the same
--- as the computed one, but this should be very unlikely
+-- 
+-- It might load a cached sound which which is incorrect, but this should be very unlikely
 cache :: Sound d Pulse -> Sound d Pulse
 cache (TimedSound d msc) = TimedSound d $ cacheComputation msc
 cache (InfiniteSound msc) = InfiniteSound $ cacheComputation msc

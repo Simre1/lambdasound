@@ -1,16 +1,16 @@
 module LambdaSound.Create
-  ( -- *** Basic sounds
+  ( -- * Basic sounds
     time,
     progress,
     sampleIndex,
     constant,
     silence,
 
-    -- *** Iterating
+    -- * Iterating
     iterateSound,
     iterateSoundPulse,
 
-    -- *** Unfolding
+    -- * Unfolding
     unfoldlSound,
     unfoldlSoundPulse,
     unfoldrSound,

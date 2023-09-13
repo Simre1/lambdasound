@@ -1,7 +1,7 @@
 -- |
 -- This module exports all needed datatypes and all the combinators needed to manipulate them.
 module LambdaSound.Sound
-  ( -- ** Sound types
+  ( -- * Sound types
     Sound (..),
     SoundDuration (..),
     Pulse (..),
@@ -13,7 +13,8 @@ module LambdaSound.Sound
     Time (..),
     DetermineDuration,
 
-    -- ** Make new sounds
+    -- * Make new sounds
+
     -- Also take a look at @LambdaSound.Create@!
     makeSound,
     makeSoundVector,
@@ -21,25 +22,25 @@ module LambdaSound.Sound
     fillWholeSoundST,
     computeOnce,
 
-    -- ** Sounds in sequence
+    -- * Sounds in sequence
     timedSequentially,
     (>>>),
     sequentially,
     infiniteSequentially,
 
-    -- ** Sounds in parallel
+    -- * Sounds in parallel
     parallel2,
     parallel,
 
-    -- ** Volume
+    -- * Volume
     amplify,
     reduce,
 
-    -- ** Pitch
+    -- * Pitch
     raise,
     diminish,
 
-    -- ** Duration
+    -- * Duration
     setDuration,
     (|->),
     getDuration,
@@ -47,20 +48,20 @@ module LambdaSound.Sound
     dropDuration,
     adoptDuration,
 
-    -- ** Sample order
+    -- * Sample order
     reverseSound,
     dropSound,
     takeSound,
 
-    -- ** Zipping
+    -- * Zipping
     zipSoundWith,
     zipSound,
 
-    -- ** Change play behavior of a sound
+    -- * Change play behavior of a sound
     changeTempo,
     changeTempoM,
 
-    -- ** Modify the samples of a sound
+    -- * Modify the samples of a sound
     modifyWholeSound,
     modifyWholeSoundST,
     withSamplingInfo,
@@ -76,9 +77,9 @@ import LambdaSound.Sound.ComputeSound
 import LambdaSound.Sound.Types
 import System.IO.Unsafe (unsafePerformIO)
 
--- | Some 'Sound's have a different while others do not.
--- 'I'nfinite 'Sound's have no duration.
+-- | 'Sound's may have a duration attached to them.
 -- 'T'imed 'Sound's have a duration.
+-- 'I'nfinite 'Sound's have no duration.
 data SoundDuration = I | T
 
 -- | Determines the duration of two sounds when they are combined
@@ -161,7 +162,7 @@ timedSequentially (TimedSound d1 c1) (TimedSound d2 c2) =
     computeSequentially (coerce $ d1 / (d1 + d2)) c1 c2
 
 -- | Append two infinite sounds where the 'Percentage' in the range @[0,1]@
--- specified when the first sound ends and the next begins.
+-- specifies when the first sound ends and the next begins.
 infiniteSequentially :: Percentage -> Sound I Pulse -> Sound I Pulse -> Sound I Pulse
 infiniteSequentially factor' (InfiniteSound c1) (InfiniteSound c2) =
   InfiniteSound $

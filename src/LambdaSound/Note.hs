@@ -4,6 +4,8 @@ module LambdaSound.Note where
 
 import LambdaSound.Sound
 
+-- * Semitones
+
 -- | Semitones are tones like 'c4', 'd4' or 'c5'.
 -- The semitone is used to determine the hz of the tone based on 'pitchStandard'
 newtype Semitone = Semitone Int deriving (Show, Eq, Num, Ord, Enum)
@@ -18,8 +20,10 @@ semitoneToHz n = pitchStandard * (2 ** (fromIntegral (fromEnum n) * 1.0 / 12.0))
 
 -- | Raise a sound by the given amount of semitones.
 -- This only works for sounds which use the period length given
--- in the compute step of the sound. 'pulse' works but 'noise' does not.
+-- in the compute step of the sound. 'sineWave' works but 'noise' does not.
+--
 -- For example:
+--
 -- > raiseSemitones 2 (asNote pulse c3) = asNote pulse d3
 raiseSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 raiseSemitones x = raise (2 ** (fromIntegral x / 12))
@@ -29,7 +33,9 @@ diminishSemitones :: Int -> Sound d Pulse -> Sound d Pulse
 diminishSemitones x = raiseSemitones (-x)
 
 -- | Transforms a function taking a 'Hz' to one taking a 'Semitone'.
--- Should be used with 'pulse' or 'harmonic'
+-- Should be used like the following:
+--
+-- > asNote sineWave c4
 asNote :: (Hz -> a) -> Semitone -> a
 asNote f s = f (semitoneToHz s)
 
@@ -96,16 +102,15 @@ g7 = 34
 a7 = 36
 b7 = 38
 
--- ** Notes
+-- * Notes
 
 -- | These are durations for the corresponding note lenghts
 -- assuming 60 bpm.
 --
 -- If you know that a sound has 60 bpm, you can easily scale to
 -- different bpm with 'scaleDuration':
--- @
--- scaleDuration (wantedBPM / 60) soundWith60BPM
--- @
+--
+-- > scaleDuration (wantedBPM / 60) soundWith60BPM
 wholeNote, halfNote, quarterNote, eightNote :: Duration
 wholeNote = 1
 halfNote = 1 / 2

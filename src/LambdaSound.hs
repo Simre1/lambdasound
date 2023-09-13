@@ -1,9 +1,11 @@
 -- |
--- Library users should implement this module (@import LambdaSound@).
+-- Library users should implement this module ( @import LambdaSound@ ).
 --
 -- This module packages all the functions from the other modules and reexports them.
--- A good starting place to explore the documentation is the *LambdaSound.Sound* module which
+-- A good starting point to explore the documentation is the @LambdaSound.Sound@ module which
 -- exports all the datatypes and many of the useful combinators you will use.
+-- 
+-- The @LambdaSound.Sample@ module contains some simple sound samples which you can play with the @LambdaSound.Play@ module. 
 module LambdaSound
   ( -- * Sounds
     module Sound,
