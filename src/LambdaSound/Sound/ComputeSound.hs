@@ -88,11 +88,11 @@ computeSequentially factor c1 c2 = ComputeSound $ \si memo -> do
     ( WriteResult $ \dest -> do
         writeResult1 $ MU.unsafeLinearSliceMArray 0 (M.Sz1 splitIndex) dest
         writeResult2 $ MU.unsafeLinearSliceMArray splitIndex (M.Sz1 $ si.samples - splitIndex) dest,
-      ComputationInfoSequentially ci1 ci2
+      ComputationInfoSequentially factor ci1 ci2
     )
 {-# INLINE computeSequentially #-}
 
-computeParallel :: ComputeSound Pulse -> Float -> ComputeSound Pulse -> ComputeSound Pulse
+computeParallel :: ComputeSound Pulse -> Percentage -> ComputeSound Pulse -> ComputeSound Pulse
 computeParallel c1 factor c2 = ComputeSound $ \si memo -> do
   let c2N = round $ factor * fromIntegral si.samples
   (delayedResult1, p1) <- asDelayedResult c1 si memo
@@ -101,7 +101,7 @@ computeParallel c1 factor c2 = ComputeSound $ \si memo -> do
     ( if si.samples == c2N
         then DelayedResult $ M.zipWith (+) delayedResult1 delayedResult2
         else DelayedResult $ M.imap (\index -> (+) $ if index < c2N then MU.unsafeIndex delayedResult2 index else 0) delayedResult1,
-      ComputationInfoParallel p1 p2
+      ComputationInfoParallel factor p1 p2
     )
 {-# INLINE computeParallel #-}
 
@@ -248,8 +248,8 @@ data SoundResult a where
 data ComputationInfo
   = ComputationInfoZip SomeStableName ComputationInfo ComputationInfo
   | ComputationInfoMap SomeStableName ComputationInfo
-  | ComputationInfoSequentially ComputationInfo ComputationInfo
-  | ComputationInfoParallel ComputationInfo ComputationInfo
+  | ComputationInfoSequentially Percentage ComputationInfo ComputationInfo
+  | ComputationInfoParallel Percentage ComputationInfo ComputationInfo
   | ComputationInfoMakeDelayedResult SomeStableName
   | ComputationInfoMapDelayedResult SomeStableName ComputationInfo
   | ComputationInfoMergeDelayedResult SomeStableName ComputationInfo ComputationInfo
