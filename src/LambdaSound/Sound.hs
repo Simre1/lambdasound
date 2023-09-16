@@ -69,6 +69,10 @@ module LambdaSound.Sound
     withSamplingInfo,
     withSampledSound,
     withSampledSoundPulse,
+
+    -- * Embed IO
+    embedIO,
+    embedIOLazily,
   )
 where
 
@@ -399,3 +403,16 @@ makeSound f = InfiniteSound $ makeWithIndexFunction f
 -- Take a look at @LambdaSound.Create@ for other creation functions.
 makeSoundVector :: (SamplingInfo -> M.Vector M.D a) -> Sound I a
 makeSoundVector f = InfiniteSound $ makeDelayedResult f
+
+-- | Embed an IO calculation when generating an infinite sound.
+--
+-- This IO action will be run each time the sound is used.
+embedIO :: IO (Sound d a) -> Sound I a
+embedIO ioSound = InfiniteSound $ embedIOCS $ getCS <$> ioSound
+
+-- | Embed an IO calculation lazily when generating an infinite sound.
+--
+-- This IO action will not necessarily run each time the sound is used due to memoization.
+-- The IO action will run at least once and at most as often as the sound occurs.
+embedIOLazily :: IO (Sound d a) -> Sound I a
+embedIOLazily ioSound = InfiniteSound $ embedIOLazilyCS $ getCS <$> ioSound

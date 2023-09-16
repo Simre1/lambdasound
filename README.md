@@ -74,6 +74,8 @@ cabal run example2
 - Cut apart sounds with `takeSound` and `dropSound`
 - Scaling playing speed
 - Cache expensive to compute sounds in your XDG-cache directory
+- Loading wav files (with some caveats)
+- Embed IO into sounds
 
 ## Building
 

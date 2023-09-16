@@ -1,5 +1,6 @@
 module LambdaSound.Sound.ComputeSound where
 
+import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.HashTable.IO qualified as H
 import Data.Hashable
@@ -21,7 +22,7 @@ makeWithIndexFunction f = makeDelayedResult $ \si ->
 makeDelayedResult :: (SamplingInfo -> M.Vector M.D a) -> ComputeSound a
 makeDelayedResult f = ComputeSound $ \si _ -> do
   stableF <- makeSomeStableName f
-  pure (DelayedResult $ f si, ComputationInfoMakeDelayedResult stableF)
+  pure (DelayedResult $ pure $ f si, ComputationInfoMakeDelayedResult stableF)
 {-# INLINE makeDelayedResult #-}
 
 changeSamplingInfo :: (SamplingInfo -> SamplingInfo) -> ComputeSound a -> ComputeSound a
@@ -36,13 +37,15 @@ mapDelayedResult mapVector cs = ComputeSound $ \si memo -> do
   (delayedVector, ci) <- asDelayedResult cs si memo
   stableMapVector <- makeSomeStableName mapVector
   let mapVector' = mapVector si
-  pure (DelayedResult $ mapVector' delayedVector, ComputationInfoMapDelayedResult stableMapVector ci)
+  pure (DelayedResult $ fmap mapVector' delayedVector, ComputationInfoMapDelayedResult stableMapVector ci)
 {-# INLINE mapDelayedResult #-}
 
 withSamplingInfoCS :: (SamplingInfo -> ComputeSound a) -> ComputeSound a
-withSamplingInfoCS f = ComputeSound $ \si memo ->
+withSamplingInfoCS f = ComputeSound $ \si memo -> do
+  stableF <- makeSomeStableName f
   let (ComputeSound compute) = f si
-   in compute si memo
+  (res, _) <- compute si memo
+  pure (res, ComputationInfoWithSamplingInfo stableF)
 {-# INLINE withSamplingInfoCS #-}
 
 withSampledSoundPulseCS :: Duration -> ComputeSound Pulse -> (M.Vector M.S Pulse -> ComputeSound a) -> ComputeSound a
@@ -62,10 +65,14 @@ withSampledSoundCS :: Duration -> ComputeSound a -> (M.Vector M.D a -> ComputeSo
 withSampledSoundCS duration cs f = ComputeSound $ \si memo -> do
   let sampleSI = makeSamplingInfo si.sampleRate duration
   (delayedVector, ci) <- asDelayedResult cs sampleSI memo
-  let (ComputeSound compute) = f delayedVector
-  (res, _) <- compute si memo
+  let nextCS = f <$> delayedVector
   stableF <- makeSomeStableName f
-  pure (res, ComputationInfoWithSampledSound stableF ci)
+  pure
+    ( DelayedResult $ do
+        (finalDelayedVector, _) <- join $ asDelayedResult <$> nextCS <*> pure si <*> pure memo
+        finalDelayedVector,
+      ComputationInfoWithSampledSound stableF ci
+    )
 {-# INLINE withSampledSoundCS #-}
 
 mergeDelayedResult :: (SamplingInfo -> M.Vector M.D a -> M.Vector M.D b -> M.Vector M.D c) -> ComputeSound a -> ComputeSound b -> ComputeSound c
@@ -74,7 +81,7 @@ mergeDelayedResult merge cs1 cs2 = ComputeSound $ \si memo -> do
   (delayedResult1, ci1) <- asDelayedResult cs1 si memo
   (delayedResult2, ci2) <- asDelayedResult cs2 si memo
   let merge' = merge si
-  pure (DelayedResult $ merge' delayedResult1 delayedResult2, ComputationInfoMergeDelayedResult stableMerge ci1 ci2)
+  pure (DelayedResult $ merge' <$> delayedResult1 <*> delayedResult2, ComputationInfoMergeDelayedResult stableMerge ci1 ci2)
 {-# INLINE mergeDelayedResult #-}
 
 computeSequentially :: Percentage -> ComputeSound Pulse -> ComputeSound Pulse -> ComputeSound Pulse
@@ -99,8 +106,11 @@ computeParallel c1 factor c2 = ComputeSound $ \si memo -> do
   (delayedResult2, p2) <- asDelayedResult c2 si {samples = c2N} memo
   pure
     ( if si.samples == c2N
-        then DelayedResult $ M.zipWith (+) delayedResult1 delayedResult2
-        else DelayedResult $ M.imap (\index -> (+) $ if index < c2N then MU.unsafeIndex delayedResult2 index else 0) delayedResult1,
+        then DelayedResult $ M.zipWith (+) <$> delayedResult1 <*> delayedResult2
+        else DelayedResult $ do
+          dR1 <- delayedResult1
+          dR2 <- delayedResult2
+          pure $ M.imap (\index -> (+) $ if index < c2N then MU.unsafeIndex dR2 index else 0) dR1,
       ComputationInfoParallel factor p1 p2
     )
 {-# INLINE computeParallel #-}
@@ -109,24 +119,27 @@ mapComputeSound :: (a -> b) -> ComputeSound a -> ComputeSound b
 mapComputeSound f cs = ComputeSound $ \si memo -> do
   stableF <- makeSomeStableName f
   (result, ci) <- asDelayedResult cs si memo
-  pure (DelayedResult $ M.map f result, ComputationInfoMap stableF ci)
+  pure (DelayedResult $ M.map f <$> result, ComputationInfoMap stableF ci)
 {-# INLINE mapComputeSound #-}
 
 asDelayedResult ::
   ComputeSound a ->
   SamplingInfo ->
   MemoComputeSound ->
-  IO (M.Vector M.D a, ComputationInfo)
+  IO (IO (M.Vector M.D a), ComputationInfo)
 asDelayedResult (ComputeSound compute) si memo = do
   (result, ci) <- compute si memo
   case result of
     DelayedResult vector -> pure (vector, ci)
-    WriteResult writeResult -> do
-      marray <- MU.unsafeMallocMArray (M.Sz1 si.samples)
-      writeResult marray
-      array <- MU.unsafeFreeze M.Seq marray
-
-      pure (M.delay array, ci)
+    WriteResult writeResult ->
+      pure
+        ( do
+            marray <- MU.unsafeMallocMArray (M.Sz1 si.samples)
+            writeResult marray
+            array <- MU.unsafeFreeze M.Seq marray
+            pure $ M.delay array,
+          ci
+        )
 {-# INLINE asDelayedResult #-}
 
 asWriteResult ::
@@ -143,11 +156,12 @@ asWriteResult (ComputeSound compute) si memo = do
       pure
         ( \dest -> do
             memoized <- lookupMemoizedComputeSound memo memoInfo
+
             case memoized of
-              Just memoSource ->
+              Just memoSource -> do
                 copyArrayIntoMArray memoSource dest
               Nothing -> do
-                M.computeInto dest vector
+                vector >>= M.computeInto dest
                 destArray <- MU.unsafeFreeze M.Seq dest
                 memoizeComputeSound memo memoInfo destArray,
           ci
@@ -159,7 +173,7 @@ zipWithCompute f cs1 cs2 = ComputeSound $ \si memo -> do
   (dV1, p1) <- asDelayedResult cs1 si memo
   (dV2, p2) <- asDelayedResult cs2 si memo
   stableF <- makeSomeStableName f
-  pure (DelayedResult $ M.zipWith f dV1 dV2, ComputationInfoZip stableF p1 p2)
+  pure (DelayedResult $ M.zipWith f <$> dV1 <*> dV2, ComputationInfoZip stableF p1 p2)
 {-# INLINE zipWithCompute #-}
 
 mapSoundFromMemory :: (M.Load r M.Ix1 Pulse) => (M.Vector M.S Pulse -> M.Vector r Pulse) -> ComputeSound Pulse -> ComputeSound Pulse
@@ -200,6 +214,25 @@ fillSoundInMemoryIO f = ComputeSound $ \si _ -> do
       ComputationInfoFillMemory stableF
     )
 {-# INLINE fillSoundInMemoryIO #-}
+
+embedIOCS :: IO (ComputeSound a) -> ComputeSound a
+embedIOCS makeCS = ComputeSound $ \si memo -> do
+  stableIO <- makeSomeStableName makeCS
+  (ComputeSound compute) <- makeCS
+  (res, _) <- compute si memo
+  pure (res, ComputationInfoIO stableIO)
+{-# INLINE embedIOCS #-}
+
+embedIOLazilyCS :: IO (ComputeSound a) -> ComputeSound a
+embedIOLazilyCS makeCS = ComputeSound $ \si memo -> do
+  stableIO <- makeSomeStableName makeCS
+  pure
+    ( DelayedResult $ do
+        (res, _) <- join $ asDelayedResult <$> makeCS <*> pure si <*> pure memo
+        res,
+      ComputationInfoIO stableIO
+    )
+{-# INLINE embedIOLazilyCS #-}
 
 pulseSize :: Int
 pulseSize = sizeOf (undefined :: Pulse)
@@ -243,7 +276,7 @@ newtype ComputeSound a = ComputeSound
 
 data SoundResult a where
   WriteResult :: (M.MVector M.RealWorld M.S Pulse -> IO ()) -> SoundResult Pulse
-  DelayedResult :: M.Vector M.D a -> SoundResult a
+  DelayedResult :: IO (M.Vector M.D a) -> SoundResult a
 
 data ComputationInfo
   = ComputationInfoZip SomeStableName ComputationInfo ComputationInfo
@@ -256,7 +289,9 @@ data ComputationInfo
   | ComputationInfoMapMemory SomeStableName ComputationInfo
   | ComputationInfoFillMemory SomeStableName
   | ComputationInfoChangeSamplingInfo SomeStableName ComputationInfo
-  | ComputationInfoWithSampledSound  SomeStableName ComputationInfo
+  | ComputationInfoWithSampledSound SomeStableName ComputationInfo
+  | ComputationInfoIO SomeStableName
+  | ComputationInfoWithSamplingInfo SomeStableName
   deriving (Eq, Generic, Show)
 
 instance Hashable ComputationInfo

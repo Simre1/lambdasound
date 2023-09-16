@@ -1,5 +1,12 @@
 # Revision history for lambdasound
 
+## 1.1.0 -- 2023-10-16
+
+* Add an example to showcase `loadSound`
+* Support loading of wav and raw files as `Sound`
+* Fix pathological behavior for repeated cached sounds
+* Add `embedIO` to embed IO into sound generation
+
 ## 1.0.1 -- 2023-10-13
 
 * Add `withSampledSound` and `withSampledSoundPulse`

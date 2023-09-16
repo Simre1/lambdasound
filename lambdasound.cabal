@@ -38,7 +38,9 @@ library
         LambdaSound.Sampling,
         LambdaSound.Create,
         LambdaSound.Convolution,
-        LambdaSound.Filter
+        LambdaSound.Filter,
+        LambdaSound.SaveAndLoad,
+        LambdaSound.SaveAndLoad.RawSamples
     other-modules:
         LambdaSound.Sound.ComputeSound,
         LambdaSound.Sound.Types,
@@ -46,7 +48,6 @@ library
     build-depends:    
         base >= 4.17.0.0 && < 5,
         ansi-terminal >= 1.0 && < 1.1,
-        binary >= 0.8.9 && < 0.9,
         bytestring >= 0.11.4 && < 0.12,
         deepseq >= 1.4.8 && < 1.5,
         bytestring-to-vector >= 0.3.0 && < 0.4,
@@ -86,6 +87,17 @@ executable example1
 executable example2
     import:           warnings
     main-is:          Example2.hs
+    build-depends:
+        base ^>=4.17.0.0,
+        lambdasound
+    default-extensions:
+        DataKinds
+    hs-source-dirs:   example
+    default-language: GHC2021
+
+executable example3
+    import:           warnings
+    main-is:          Example3.hs
     build-depends:
         base ^>=4.17.0.0,
         lambdasound

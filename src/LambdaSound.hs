@@ -37,6 +37,9 @@ module LambdaSound
     -- * Sample sounds,
     module Sampling,
 
+    -- * Save and load sounds
+    module SaveAndLoad,
+
     -- * Cache sounds
     module Cache,
   )
@@ -53,3 +56,4 @@ import LambdaSound.Plot as Plot
 import LambdaSound.Samples as Sample
 import LambdaSound.Sampling as Sampling
 import LambdaSound.Sound as Sound
+import LambdaSound.SaveAndLoad as SaveAndLoad

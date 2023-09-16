@@ -20,16 +20,22 @@ main =
           bench "Dropped sound" $ nfSound droppedSound,
           bench "Taken sound" $ nfSound takenSound,
           bench "Cached sound" $ nfSound cachedSound,
+          bench "Repeated cached sound" $ nfSound repeatedCachedSound,
           bench "Timed parallel sound" $ nfSound timedParallelSound,
           bench "Unfold pulse" $ nfSound unfoldPulse,
           bench "Unfold normally" $ nfSound unfoldNormally,
           bench "With sampled sound" $ nfSound useSampledSound,
-          bench "Repeated with sampled sound" $ nfSound repeatedSampledSound
+          bench "Repeated with sampled sound" $ nfSound repeatedSampledSound,
+          bench "Load sound" $ nfSound loadedSound,
+          bench "Repeated with loaded sound" $ nfSound repeatedLoadedSound
         ]
     ]
 
 nfSound :: Sound T Pulse -> Benchmarkable
 nfSound = nfIO . sampleSound 44100
+
+nfSoundIO :: IO (Sound T Pulse) -> Benchmarkable
+nfSoundIO sound = nfIO $ sound >>= sampleSound 44100
 
 simplePulse :: Sound T Pulse
 simplePulse = 3 |-> sineWave 440
@@ -74,6 +80,9 @@ takenSound = repeatSound 10 $ takeSound 2.5 someSounds
 cachedSound :: Sound T Pulse
 cachedSound = cache longSound
 
+repeatedCachedSound :: Sound T Pulse
+repeatedCachedSound = repeatSound 20 cachedSound
+
 timedParallelSound :: Sound T Pulse
 timedParallelSound =
   parallel $
@@ -100,3 +109,9 @@ useSampledSound = setDuration 5 $ withSampledSoundPulse simplePulse $ \samples -
 
 repeatedSampledSound :: Sound T Pulse
 repeatedSampledSound = repeatSound 20 useSampledSound
+
+loadedSound :: Sound T Pulse
+loadedSound = setDuration 3 $ embedIOLazily $ loadWav "sample-sounds/accelerating.wav"
+
+repeatedLoadedSound :: Sound T Pulse
+repeatedLoadedSound = repeatSound 20 loadedSound

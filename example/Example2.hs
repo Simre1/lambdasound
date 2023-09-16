@@ -3,8 +3,7 @@ import LambdaSound
 main :: IO ()
 main = do
   play 44100 1 $ setDuration (getDuration sound * 60 / 70) sound
-  -- samples <- sampleSound 44100 $ setDuration (getDuration sound * 60 / 70) sound
-  -- saveWav "sound.wav" 44100 samples
+  -- saveWav "sound.wav" 44100 sound
 
 sound :: Sound T Pulse
 sound =

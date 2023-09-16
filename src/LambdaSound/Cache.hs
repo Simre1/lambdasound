@@ -7,7 +7,6 @@ import Data.ByteString.Lazy qualified as BL
 import Data.Hashable (hash)
 import Data.Massiv.Array qualified as M
 import Data.Massiv.Array.Unsafe qualified as MU
-import Data.Vector.Storable qualified as V
 import Data.Vector.Storable.ByteString (byteStringToVector, vectorToByteString)
 import Data.Word
 import LambdaSound.Sound
@@ -19,7 +18,7 @@ import System.FilePath (joinPath)
 -- | Caches a sound. If the sound is cached, then
 -- the sound gets read from the XDG cache directory and does not have to
 -- be computed again.
--- 
+--
 -- It might load a cached sound which which is incorrect, but this should be very unlikely
 cache :: Sound d Pulse -> Sound d Pulse
 cache (TimedSound d msc) = TimedSound d $ cacheComputation msc
@@ -27,31 +26,38 @@ cache (InfiniteSound msc) = InfiniteSound $ cacheComputation msc
 
 cacheComputation :: ComputeSound Pulse -> ComputeSound Pulse
 cacheComputation cs = ComputeSound $ \si memo -> do
-  key <- liftIO $ computeCacheKey cs
-  cacheDir <- liftIO $ getXdgDirectory XdgCache "lambdasound"
-  let directoryPath = joinPath [cacheDir, show key]
-  liftIO $ createDirectoryIfMissing True directoryPath
+  (writeSamples, ci) <- asWriteResult cs si memo
 
-  let filePath = joinPath [directoryPath, show $ si.samples]
+  let tryCache dest = do
+        let memoInfo = MemoInfo si ci
 
-  exists <- liftIO $ doesFileExist filePath
-  if exists
-    then do
-      file <- liftIO $ BL.readFile filePath
-      let floats = byteStringToVector $ toStrict $ decompress file
-          (ComputeSound compute) = makeWithIndexFunction @Pulse (\_ index -> floats V.! index)
-      compute si memo
-    else 
-    do
-      (writeResult, ci) <- asWriteResult cs si memo
-      pure
-        ( WriteResult $ \dest -> do
-            writeResult dest
-            floats <- MU.unsafeFreeze M.Seq dest
-            let bytes = compress $ fromStrict $ vectorToByteString $ M.toStorableVector floats
-            BL.writeFile filePath bytes,
-          ci
-        )
+        memoized <- lookupMemoizedComputeSound memo memoInfo
+
+        case memoized of
+          Just memoSource -> do
+            copyArrayIntoMArray memoSource dest
+          Nothing -> do
+            key <- liftIO $ computeCacheKey cs
+            cacheDir <- liftIO $ getXdgDirectory XdgCache "lambdasound"
+            let directoryPath = joinPath [cacheDir, show key]
+            liftIO $ createDirectoryIfMissing True directoryPath
+
+            let filePath = joinPath [directoryPath, show $ si.samples]
+
+            exists <- liftIO $ doesFileExist filePath
+            if exists
+              then do
+                file <- liftIO $ BL.readFile filePath
+                let floats = M.fromStorableVector M.Seq $ byteStringToVector $ toStrict $ decompress file
+                memoizeComputeSound memo memoInfo floats
+                M.computeInto dest floats
+              else do
+                writeSamples dest
+                floats <- MU.unsafeFreeze M.Seq dest
+                let bytes = compress $ fromStrict $ vectorToByteString $ M.toStorableVector floats
+                BL.writeFile filePath bytes
+
+  pure (WriteResult tryCache, ci)
 
 computeCacheKey :: ComputeSound Pulse -> IO Word64
 computeCacheKey cs = do
