@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               lambdasound
-version:            1.0.1
+version:            1.1
 synopsis:           A libary for generating low-level sounds with high-level combinators
 description:        'lambdasound' can generate all kinds of sounds, play them and save them as wav or pcm data.
                     Sound can be manipulated in both a low and high-level way. It is possible to 
