@@ -19,6 +19,7 @@ import Data.Massiv.Array qualified as M
 import Data.Massiv.Array.Unsafe qualified as MU
 import Data.Maybe (fromMaybe)
 import LambdaSound.Sound
+import DSP.Filter.Analog.Prototype
 
 -- | IIRParams contains the filter coefficients for the forward and
 -- feedback computation

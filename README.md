@@ -61,7 +61,7 @@ cabal run example2
 
 ## Feature Overview
 
-- Play sounds with SDL2
+- Play sounds with RTAudio
 - Save sounds as WAV
 - Create raw audio samples by defining a vector of floats
 - Manipulate the duration of a sound
@@ -91,10 +91,8 @@ You can run the example with:
 ```haskell
 cabal run example1
 cabal run example2
+cabal run example3
 ```
-
-For this library, you will need to have **SDL2** installed. Take a look at [proteeaudio-sdl](https://hackage.haskell.org/package/proteaaudio-sdl) for installation instructions.
-
 
 ## Contributing
 

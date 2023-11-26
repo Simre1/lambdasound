@@ -6,7 +6,7 @@ import Data.Massiv.Array qualified as M
 import Data.Vector.Storable.ByteString (vectorToByteString)
 import LambdaSound.Sampling
 import LambdaSound.Sound
-import Sound.ProteaAudio.SDL qualified as PA
+import Sound.ProteaAudio qualified as PA
 
 -- | Play the sound with the given sample rate and the given volume.
 --

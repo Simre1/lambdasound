@@ -1,3 +1,11 @@
 packages: .
 tests: True
 benchmarks: True
+
+source-repository-package
+  type:     git
+  location: https://github.com/csabahruska/proteaaudio
+  subdir:   proteaaudio
+  tag: ec097b0cce0b2fb2835971e39618a06937d9485b
+
+allow-newer: base
