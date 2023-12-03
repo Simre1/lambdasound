@@ -1,5 +1,10 @@
 # Revision history for lambdasound
 
+## 1.2.0 -- 2023-12-03
+
+* Switch to proteaaudio version which uses RTAudio
+* Update to GHC 9.6
+
 ## 1.1.0 -- 2023-10-16
 
 * Add an example to showcase `loadSound`

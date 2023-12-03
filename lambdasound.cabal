@@ -16,6 +16,7 @@ build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 homepage:           https://github.com/Simre1/lambdasound
 bug-reports:        https://github.com/Simre1/lambdasound/issues
+tested-with: GHC==9.6.3, GHC==9.4.7
 
 extra-source-files:
     README.md
