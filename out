@@ -1,0 +1,6 @@
+Build profile: -w ghc-9.10.1 -O1
+In order, the following will be built (use -v for more details):
+ - lambdasound-2.0.0 (lib) (file simd_routines.c changed)
+ - lambdasound-2.0.0 (exe:example1) (dependency rebuilt)
+Preprocessing library for lambdasound-2.0.0...
+Building library for lambdasound-2.0.0...
