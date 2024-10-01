@@ -1,6 +1,7 @@
 #include "x86/avx.h"
 #include "x86/avx2.h"
 #include "x86/svml.h"
+#include <math.h>
 
 #define UP8 simde_mm256_set_ps(7,6,5,4,3,2,1,0)
 #define PI 3.14159265358979323846
@@ -8,12 +9,6 @@
 #define PERIOD8 simde_mm256_set1_ps(2 * PI)
 
 #define SIN_LOOKUP_SIZE 256
-
-struct Coefficients {
-  float taylor[9];
-  float signum; 
-  float abs;
-};
 
 float sine_table[SIN_LOOKUP_SIZE];
 
@@ -64,48 +59,128 @@ simde__m256 modulo1(simde__m256 x){
     return _mm256_sub_ps(x2, simde_mm256_set1_ps(1.0));
 }
 
-void computeF(float* buffer, int samples, Coefficients* coefficients) {
+typedef struct {
+  float taylor[10];
+  float signum; 
+  float abs;
+} Coefficients;
+
+
+void computeWave(float* buffer, int samples, float dt, Coefficients* coefficients) {
+
+  // for (; i < samples - 7; i = i + 8) {
+  // }
+  // float* buffer = (float*)aligned_alloc(32, 100 * sizeof(float));
+  // int samples = 100;
+
+  double theta = 2 * PI * dt * 880;
+  double cosTheta = cos(theta);
+  double sinTheta = sin(theta);
+  double cosTheta2 = pow(cosTheta,2);
+  double cosTheta3 = pow(cosTheta,3);
+  double cosTheta4 = pow(cosTheta,4);
+  double cosTheta5 = pow(cosTheta,5);
+  double cosTheta6 = pow(cosTheta,6);
+  double cosTheta7 = pow(cosTheta,7);
+  double cosTheta8 = pow(cosTheta,8);
+  
+  // sin_n =  sin(theta)^n
+  
+  simde__m256 coefficients0 = simde_mm256_set_ps(
+    -128*cosTheta7 + 192*cosTheta5 - 80*cosTheta3 + 8*cosTheta,
+    -64*cosTheta6 + 80*cosTheta4 - 24*cosTheta2 + 1,
+    -32*cosTheta5 + 32*cosTheta3 - 6*cosTheta,
+    -16*cosTheta4 + 12*cosTheta2 - 1,
+    -8*cosTheta3 + 4*cosTheta,
+    1-4*cosTheta2,
+    -2*cosTheta,
+    (-1)
+    );
+
+  simde__m256 coefficients1 = simde_mm256_set_ps(
+    256*cosTheta8 - 448*cosTheta6 + 240*cosTheta4 - 40*cosTheta2 + 1,
+    128*cosTheta7 - 192*cosTheta5 + 80*cosTheta3 - 8*cosTheta,
+    64*cosTheta6 - 80*cosTheta4 + 24*cosTheta2 - 1,
+    32*cosTheta5 - 32*cosTheta3 + 6*cosTheta,
+    16*cosTheta4 - 12*cosTheta2 + 1,
+    8*cosTheta3 - 4*cosTheta,
+    4*cosTheta2 - 1,
+    2*cosTheta
+    );
 
   int i = 0;
-  for (; i < samples - 7; i = i + 8) {
-    simde__m256 is = simde_mm256_add_ps(UP8, simde_mm256_set1_ps(i));
-    simde__m256 x = modulo1(is);
-    simde__m256 x2 = simde_mm256_mul_ps(x, x);
-    simde__m256 x3 = simde_mm256_mul_ps(x2, x);
-    simde__m256 x4 = simde_mm256_mul_ps(x3, x);
-    simde__m256 x5 = simde_mm256_mul_ps(x4, x); 
-    simde__m256 x6 = simde_mm256_mul_ps(x5, x); 
-    simde__m256 x7 = simde_mm256_mul_ps(x6, x); 
-    simde__m256 x8 = simde_mm256_mul_ps(x7, x); 
-    simde__m256 x9 = simde_mm256_mul_ps(x8, x); 
-    
-    simde__m256 result = simde_mm256_set1_ps(*coefficients.taylor[0]);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[1]), x, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[2]), x2, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[3]), x3, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[4]), x4, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[5]), x5, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[6]), x6, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[7]), x7, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[8]), x8, result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.taylor[9]), x9, result);
+  simde__m256 s0, s1, result;
+  
+  s0 = simde_mm256_set1_ps(- 2 * cosTheta * sinTheta);
+  s1 = simde_mm256_set1_ps(-sinTheta);
 
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.signum), simde_signum(x), result);
-    result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(*coefficients.abs), simde_abs(x), result);
-    
-    simde__m256* vec8 = (simde__m256*)(buffer + i);
-    *vec8 = result;
+  // Error creeps in quickly. Should be fixed when switching to 2 kb chunks
+  for (; i < samples - 7; i = i + 8) {
+    result = simde_mm256_mul_ps(coefficients0, s0);
+    result = simde_mm256_fmadd_ps(coefficients1, s1, result);
+
+    simde_mm256_store_ps(buffer+i, result);
+
+    s0 = simde_mm256_set1_ps(*(buffer + i + 6));
+    s1 = simde_mm256_set1_ps(*(buffer + i + 7));
   }
+  
   for (;i < samples ; i = i + 1) {
-    *(buffer + i) = amplitude * sin(2 * PI * hz * i);
+    *(buffer + i) = 2 * cosTheta * *(buffer + i - 1) - *(buffer + i - 2);
   }
+
+  for (int j = 0; j < samples; j++){
+    float diff = sin(j * theta) - *(buffer + j);
+    printf("%f, %f\n", *(buffer + j), diff);
+  }
+  
 } 
 
 
 
+// void computeWave(float* buffer, int samples, float dt, Coefficients* coefficients) {
 
+//   int i = 0;
+//   for (; i < samples - 7; i = i + 8) {
+//     simde__m256 is = simde_mm256_add_ps(UP8, simde_mm256_set1_ps(i));
+//     simde__m256 timings = simde_mm256_mul_ps(is, simde_mm256_set1_ps(dt));
+//     simde__m256 x = modulo1(timings);
+//     simde__m256 x2 = simde_mm256_mul_ps(x, x);
+//     simde__m256 x3 = simde_mm256_mul_ps(x2, x);
+//     simde__m256 x4 = simde_mm256_mul_ps(x3, x);
+//     simde__m256 x5 = simde_mm256_mul_ps(x4, x); 
+//     simde__m256 x6 = simde_mm256_mul_ps(x5, x); 
+//     simde__m256 x7 = simde_mm256_mul_ps(x6, x); 
+//     simde__m256 x8 = simde_mm256_mul_ps(x7, x); 
+//     simde__m256 x9 = simde_mm256_mul_ps(x8, x); 
+    
+//     simde__m256 result = simde_mm256_set1_ps(coefficients->taylor[0]);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[1]), x, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[2]), x2, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[3]), x3, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[4]), x4, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[5]), x5, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[6]), x6, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[7]), x7, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[8]), x8, result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->taylor[9]), x9, result);
 
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->signum), simde_signum(x), result);
+//     result = simde_mm256_fmadd_ps(simde_mm256_set1_ps(coefficients->abs), simde_abs(x), result);
 
+//     if(i < 10){
+//       print_simde__m256(x);
+//       print_simde__m256(result);
+//     }
+    
+//     simde__m256* vec8 = (simde__m256*)(buffer + i);
+//     *vec8 = result;
+//   }
+//   for (;i < samples ; i = i + 1) {
+
+//     *(buffer + i) = 0;
+//   }
+// } 
 
 
 // simde__m256 simde_sin_taylor(simde__m256 input) {

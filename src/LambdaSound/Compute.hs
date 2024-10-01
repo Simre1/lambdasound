@@ -25,14 +25,13 @@ asWriteBuffer (Generate f) v = forM_ [1 .. VSM.length v] $ \i -> do
 asGenerate :: Int -> Segment -> IO (Int -> MyFloat)
 asGenerate _ (Generate f) = pure f
 asGenerate samples (WriteBuffer f) = do
-  vec <- VSM.new samples
+  vec <- VSM.unsafeNew samples
   f vec
   frozen <- VS.unsafeFreeze vec
   pure $ \i -> frozen VS.! i
 
 computeMusic :: Hz -> Music -> IO Samples
 computeMusic (Hz hz) (Music {duration, sound}) = do
-  setupSIMDRoutines
   let samples = round $ coerce @_ @Float duration * fromIntegral hz
       samplingFrequency = 1 / fromIntegral hz
   segment <- go samples samplingFrequency sound
@@ -51,7 +50,7 @@ computeMusic (Hz hz) (Music {duration, sound}) = do
           \_ -> realToFrac v
       ElementarySound (SineWave {amplitude, hz}) -> pure $
         WriteBuffer $
-          \buffer -> VSM.unsafeWith buffer $ \ptr -> simpleSin ptr (fromIntegral $ VSM.length buffer) (realToFrac amplitude) (realToFrac $ hz * samplingFrequency)
+          \buffer -> computeWave buffer samplingFrequency (sineCoefficients hz)
         -- Generate $
         --     \i -> realToFrac $ amplitude * sin (hz * 2 * pi * fromIntegral i * samplingFrequency)
       Sequence {seperator, sound1, sound2} -> do
